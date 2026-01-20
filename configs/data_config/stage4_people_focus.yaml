@@ -1,0 +1,14 @@
+
+datasets:
+  # Stage 4: 人物关注增强训练
+  # 数据组成: 90% 人物中心 + 10% 通用（防止遗忘）
+  
+  # 1. Social-IQ (社交互动理解, 70%)
+  - json_path: data_config/social_iq_v2_rewrite.json
+    data_root: ${PROJECT_ROOT}/data/IntentTrain/videos
+    sampling_strategy: end:70%
+  
+  # 2. EMER (情绪识别, 30%)
+  - json_path: data_config/emer_rewrite.json
+    data_root: ${PROJECT_ROOT}/data/IntentTrain/videos
+    sampling_strategy: all

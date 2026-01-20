@@ -1,0 +1,16 @@
+
+datasets:
+  # Stage 5测试配置：快速验证训练脚本
+  # 使用少量数据测试对比打分逻辑
+  
+  # 1. Social-IQ (测试用，取8个样本 - 适配4卡训练)
+  - json_path: data_config/social_iq_v2_rewrite.json
+    data_root: ${PROJECT_ROOT}/data/IntentTrain/videos
+    sampling_strategy: random:8
+    weight: 0.5
+  
+  # 2. EMER (测试用，取8个样本 - 适配4卡训练)
+  - json_path: data_config/emer_rewrite.json
+    data_root: ${PROJECT_ROOT}/data/IntentTrain/videos
+    sampling_strategy: random:8
+    weight: 0.5

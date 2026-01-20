@@ -1,0 +1,12 @@
+
+datasets:
+  - json_path: data_config/emer_rewrite.json
+    data_root: ${PROJECT_ROOT}/data/videos
+    sampling_strategy: end:50%
+  - json_path: data_config/social_iq_v2_rewrite.json
+    data_root: ${PROJECT_ROOT}/data/videos
+    sampling_strategy: end:50%
+  # 不使用Video-R1数据集，只用IntentTrain数据训练
+  # - json_path: data_config/Video-R1_rewrite.json
+  #   data_root: ${PROJECT_ROOT}/data/videos
+  #   sampling_strategy: end:30%

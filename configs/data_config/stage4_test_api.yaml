@@ -1,0 +1,8 @@
+
+datasets:
+  # Stage 4: API Reward 测试 (只取3个样本)
+  
+  # 1. Social-IQ (随机取3个样本)
+  - json_path: data_config/social_iq_v2_rewrite.json
+    data_root: ${PROJECT_ROOT}/data/IntentTrain/videos
+    sampling_strategy: random:3

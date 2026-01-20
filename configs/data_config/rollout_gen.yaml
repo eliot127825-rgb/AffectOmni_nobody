@@ -1,0 +1,8 @@
+# Rollout生成的数据配置
+# 使用Stage 1的训练数据来生成rollout
+
+datasets:
+  - json_path: data_config/emer_rewrite.json
+    data_root: ${PROJECT_ROOT}/data/videos
+  - json_path: data_config/social_iq_v2_rewrite.json
+    data_root: ${PROJECT_ROOT}/data/videos

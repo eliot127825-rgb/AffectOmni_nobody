@@ -1,0 +1,15 @@
+
+datasets:
+  # Stage 4: 人物关注增强训练 (不含 Video-R1)
+  # Video-R1 有缺失文件，暂时跳过
+  
+  # 1. Social-IQ (社交互动理解, 70%)
+  - json_path: data_config/social_iq_v2_rewrite.json
+    data_root: ${PROJECT_ROOT}/data/videos
+    sampling_strategy: all
+  
+  # 2. EMER (情绪识别, 30%)
+  - json_path: data_config/emer_rewrite.json
+    data_root: ${PROJECT_ROOT}/data/videos
+    sampling_strategy: all
+

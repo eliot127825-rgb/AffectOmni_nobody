@@ -1,0 +1,9 @@
+
+datasets:
+  # Stage 4 单样本测试配置
+  # 用于验证训练流程是否能跑通
+  
+  # 只取1个样本进行测试
+  - json_path: data_config/social_iq_v2_rewrite.json
+    data_root: ${PROJECT_ROOT}/data/videos
+    sampling_strategy: first:1

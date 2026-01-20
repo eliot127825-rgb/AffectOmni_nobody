@@ -1,0 +1,16 @@
+
+datasets:
+  # Stage 5实验：结果奖励优化
+  # 数据组成: Social-IQ后50% + EMER后50%
+  
+  # 1. Social-IQ后50%（社交互动理解）
+  - json_path: data_config/social_iq_v2_rewrite.json
+    data_root: ${PROJECT_ROOT}/data/IntentTrain/videos
+    sampling_strategy: end:50%  # 后50%，约1368样本
+    weight: 0.8
+  
+  # 2. EMER后50%（情绪识别）
+  - json_path: data_config/emer_rewrite.json
+    data_root: ${PROJECT_ROOT}/data/IntentTrain/videos
+    sampling_strategy: end:50%  # 后50%，约75样本
+    weight: 0.2

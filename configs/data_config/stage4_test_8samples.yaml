@@ -1,0 +1,9 @@
+
+datasets:
+  # Stage 4 测试配置 - 8个样本
+  # 用于 4 GPU 训练测试
+  
+  - json_path: data_config/social_iq_v2_rewrite.json
+    data_root: ${PROJECT_ROOT}/data/videos
+    sampling_strategy: first:8
+
