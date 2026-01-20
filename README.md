@@ -1,11 +1,8 @@
 ## 🎬 Demo
 
-<table>
-  <tr>
-    <td><img src="./assets/demo2.gif" width="100%"></td>
-    <td><img src="./assets/demo2_seg.gif" width="100%"></td>
-  </tr>
-</table>
+<p align="center">
+  <img src="./assets/demo2.gif" width="60%">
+</p>
 
 ### 📝 Model Output
 
@@ -57,3 +54,18 @@
 > person: man in plaid shirt
 > person: man in dark shirt, moving suddenly with the pie
 > ```
+
+---
+
+### 🎯 Segmentation Comparison
+
+<table>
+  <tr>
+    <td align="center"><b>Original Video</b></td>
+    <td align="center"><b>SAM3 Segmentation</b></td>
+  </tr>
+  <tr>
+    <td><img src="./assets/demo2.gif" width="100%"></td>
+    <td><img src="./assets/demo2_seg.gif" width="100%"></td>
+  </tr>
+</table>
