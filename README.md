@@ -1,3 +1,9 @@
+## 🎥 Overview Demo
+
+<p align="center">
+  <video src="https://github.com/eliot127825-rgb/20260120_icml2026/raw/main/assets/Demo%20Video.mp4" width="80%" controls></video>
+</p>
+
 ## 🎬 Demo
 
 <p align="center">
