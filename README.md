@@ -1,7 +1,7 @@
 ## 🎥 Overview Demo
 
 <p align="center">
-  <img src="./assets/Demo_Video.gif" width="80%">
+  <img src="./assets/Demo_Video_small.gif" width="80%">
 </p>
 
 ## 🎬 Demo
