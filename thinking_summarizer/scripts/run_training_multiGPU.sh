@@ -1,12 +1,12 @@
 #!/bin/bash
 
-# Thinking Summarizer 多卡训练启动脚本
-# 使用4张A800 GPU进行分布式训练
+# Thinking Summarizer multi-GPU training launch script
+# Distributed training with 4 GPUs
 
-# 设置使用的GPU
+# Set GPUs to use
 export CUDA_VISIBLE_DEVICES=0,1,2,3
 
-# 使用torchrun启动多卡训练
+# Launch multi-GPU training with torchrun
 torchrun \
   --nproc_per_node=4 \
   --master_port=29500 \
@@ -27,9 +27,9 @@ torchrun \
   --save-steps 50 \
   --logging-steps 10
 
-# 说明：
-# - nproc_per_node=4: 使用4张GPU
-# - batch-size=2: 每张卡batch size为2
-# - gradient-accumulation=2: 梯度累积2步
-# - 有效batch size = 4 GPUs × 2 batch × 2 accumulation = 16
-# - 相比单卡训练，速度提升约3-3.5倍
+# Notes:
+# - nproc_per_node=4: use 4 GPUs
+# - batch-size=2: per-GPU batch size of 2
+# - gradient-accumulation=2: 2-step gradient accumulation
+# - effective batch size = 4 GPUs x 2 batch x 2 accumulation = 16
+# - ~3-3.5x speedup compared to single-GPU training

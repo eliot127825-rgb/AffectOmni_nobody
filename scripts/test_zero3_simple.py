@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 """
-简化版 Zero3 + 多模态测试（不使用 CPU offload，加速测试）
+Simplified Zero3 + multimodal test (without CPU offload, for faster testing)
 
-运行:
+Usage:
   CUDA_VISIBLE_DEVICES=2,3,4,5 deepspeed --num_gpus 4 scripts/test_zero3_simple.py
 """
 import os
@@ -15,13 +15,13 @@ from transformers import Qwen2_5OmniThinkerForConditionalGeneration, Qwen2_5Omni
 
 
 def check_garbled(text, test_name):
-    """检查是否有乱码"""
+    """Check for garbled output"""
     if 'systemsystem' in text.lower() or 'contextsystem' in text.lower():
-        print(f'⚠️  [{test_name}] 检测到乱码!')
-        print(f'    输出样本: {text[:200]}')
+        print(f'⚠️  [{test_name}] Garbled output detected!')
+        print(f'    Output sample: {text[:200]}')
         return True
     else:
-        print(f'✅ [{test_name}] 输出正常')
+        print(f'✅ [{test_name}] Output is normal')
         return False
 
 
@@ -30,7 +30,7 @@ def main():
     local_rank = int(os.environ.get('LOCAL_RANK', 0))
     is_main = local_rank == 0
     
-    # 不使用 CPU offload，速度更快
+    # No CPU offload for faster execution
     ds_config = {
         "bf16": {"enabled": True},
         "zero_optimization": {
@@ -48,7 +48,7 @@ def main():
     
     if is_main:
         print('=' * 60)
-        print('Zero3 + 多模态简化测试 (无 CPU offload)')
+        print('Zero3 + multimodal simplified test (no CPU offload)')
         print('=' * 60)
     
     deepspeed.init_distributed()
@@ -57,7 +57,7 @@ def main():
     test_video = "${PROJECT_ROOT}/data/videos/MER24/sample_00000033.mp4"
     
     if is_main:
-        print('\n加载模型...')
+        print('\nLoading model...')
     
     model = Qwen2_5OmniThinkerForConditionalGeneration.from_pretrained(
         model_path,
@@ -66,12 +66,12 @@ def main():
     )
     processor = Qwen2_5OmniProcessor.from_pretrained(model_path, trust_remote_code=True)
     
-    # 模拟 trainer 设置
+    # Simulate trainer setup
     model.gradient_checkpointing_enable()
     model.config.use_cache = False
     
     if is_main:
-        print('初始化 DeepSpeed Zero3...')
+        print('Initializing DeepSpeed Zero3...')
     
     model_engine, _, _, _ = deepspeed.initialize(
         model=model, 
@@ -89,10 +89,10 @@ def main():
     )
     
     # =====================================================
-    # 测试 1: 纯文本
+    # Test 1: Text-only
     # =====================================================
     if is_main:
-        print('\n--- 测试 1: 纯文本生成 ---')
+        print('\n--- Test 1: Text-only generation ---')
     
     text1 = '<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n<|im_start|>user\nSay hello in one sentence.<|im_end|>\n<|im_start|>assistant\n'
     inputs1 = processor(text=[text1], return_tensors='pt', padding=True)
@@ -104,16 +104,16 @@ def main():
     
     if is_main:
         result1 = processor.batch_decode(outputs1, skip_special_tokens=True)[0]
-        print(f'  结果: {result1[:200]}')
-        check_garbled(result1, "纯文本")
+        print(f'  Result: {result1[:200]}')
+        check_garbled(result1, "text-only")
     
     torch.distributed.barrier()
     
     # =====================================================
-    # 测试 2: 视频 (使用 processor 直接处理)
+    # Test 2: Video (using processor directly)
     # =====================================================
     if is_main:
-        print('\n--- 测试 2: 视频生成 (processor直接处理) ---')
+        print('\n--- Test 2: Video generation (processor direct processing) ---')
     
     try:
         text2 = '<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n<|im_start|>user\n<|vision_bos|><|VIDEO|><|vision_eos|>\nWhat do you see? Reply briefly.<|im_end|>\n<|im_start|>assistant\n'
@@ -137,22 +137,22 @@ def main():
         
         if is_main:
             result2 = processor.batch_decode(outputs2, skip_special_tokens=True)[0]
-            print(f'  结果: {result2[:300]}')
-            check_garbled(result2, "视频")
+            print(f'  Result: {result2[:300]}')
+            check_garbled(result2, "video")
             
     except Exception as e:
         if is_main:
-            print(f'  ❌ 错误: {e}')
+            print(f'  ❌ Error: {e}')
             import traceback
             traceback.print_exc()
     
     torch.distributed.barrier()
     
     # =====================================================
-    # 测试 3: 使用 qwen_omni_utils (模拟 trainer 数据处理)
+    # Test 3: Using qwen_omni_utils (simulating trainer data processing)
     # =====================================================
     if is_main:
-        print('\n--- 测试 3: qwen_omni_utils 处理 ---')
+        print('\n--- Test 3: qwen_omni_utils processing ---')
     
     try:
         from qwen_omni_utils import process_mm_info
@@ -194,18 +194,18 @@ def main():
         
         if is_main:
             result3 = processor.batch_decode(outputs3, skip_special_tokens=True)[0]
-            print(f'  结果: {result3[:300]}')
+            print(f'  Result: {result3[:300]}')
             check_garbled(result3, "qwen_omni_utils")
             
     except Exception as e:
         if is_main:
-            print(f'  ❌ 错误: {e}')
+            print(f'  ❌ Error: {e}')
             import traceback
             traceback.print_exc()
     
     if is_main:
         print('\n' + '=' * 60)
-        print('测试完成!')
+        print('Test completed!')
         print('=' * 60)
 
 

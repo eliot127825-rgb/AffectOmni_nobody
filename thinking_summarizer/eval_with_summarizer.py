@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-集成evaluation脚本：HumanOmniV2模型生成thinking + Summarizer压缩
+Integrated evaluation script: Omni Thinker model generates thinking + Summarizer compression.
 """
 import os
 import sys
@@ -11,15 +11,15 @@ import argparse
 from tqdm import tqdm
 from pathlib import Path
 
-# 添加eval路径
-sys.path.insert(0, '${PROJECT_ROOT}/src/eval')
+# Add eval path
+sys.path.insert(0, os.environ.get('EVAL_PATH', './eval'))
 from transformers import Qwen2_5OmniThinkerForConditionalGeneration, Qwen2_5OmniProcessor
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from peft import PeftModel
 from qwen_omni_utils import process_mm_info
 
 def extract_think(output_str):
-    """提取<think>标签中的内容"""
+    """Extract content within <think> tags"""
     pattern = r'<think>\s*(.*?)\s*</think>'
     match = re.search(pattern, output_str, re.DOTALL)
     if match:
@@ -27,7 +27,7 @@ def extract_think(output_str):
     return ""
 
 def extract_answer(text):
-    """提取<answer>标签中的内容"""
+    """Extract content within <answer> tags"""
     pattern = r'<answer>\s*(.*?)\s*</answer>'
     match = re.search(pattern, text, re.DOTALL)
     if match:
@@ -35,9 +35,9 @@ def extract_answer(text):
     return ""
 
 class SummarizerModel:
-    """Summarizer模型封装"""
+    """Summarizer model wrapper"""
     def __init__(self, base_model_path, lora_path):
-        print("加载Summarizer模型...")
+        print("Loading Summarizer model...")
         self.tokenizer = AutoTokenizer.from_pretrained(base_model_path, trust_remote_code=True)
         self.model = AutoModelForCausalLM.from_pretrained(
             base_model_path,
@@ -47,10 +47,10 @@ class SummarizerModel:
         )
         self.model = PeftModel.from_pretrained(self.model, lora_path)
         self.model.eval()
-        print("✓ Summarizer加载完成")
+        print("Summarizer loaded successfully")
     
     def summarize(self, thinking_text):
-        """对thinking进行总结"""
+        """Summarize the thinking process"""
         instruction = """Analyze the following reasoning process and extract structured information.
 
 Output format:
@@ -91,23 +91,23 @@ Please segment the following in the video: [object1], [object2], [object3]"""
         return summary
 
 def load_test_samples(data_path, video_dir=None, num_samples=5):
-    """加载测试样本，支持多种数据格式"""
+    """Load test samples, supporting multiple data formats"""
     with open(data_path) as f:
         data = json.load(f)
     
-    # 取前num_samples个样本
+    # Take first num_samples samples
     samples = []
     for item in data[:num_samples]:
-        # 获取视频路径
+        # Get video path
         video = item.get('video_path') or item.get('video', '')
         if video_dir and not os.path.isabs(video):
             video = os.path.join(video_dir, video)
         
-        # 构建问题文本（支持多种格式）
+        # Build question text (supports multiple formats)
         if 'question' in item:
             question = item['question']
         else:
-            # 使用 problem + options 格式
+            # Use problem + options format
             question = item.get('problem', '')
             if 'options' in item:
                 options_text = '\n'.join(item['options'])
@@ -124,11 +124,11 @@ def load_test_samples(data_path, video_dir=None, num_samples=5):
     return samples
 
 def run_evaluation(args):
-    """运行完整的evaluation流程"""
+    """Run the full evaluation pipeline"""
     
-    # 1. 加载HumanOmniV2模型
+    # 1. Load Omni Thinker model
     print("="*80)
-    print("Step 1: 加载HumanOmniV2 Thinker模型")
+    print("Step 1: Loading Omni Thinker model")
     print("="*80)
     processor = Qwen2_5OmniProcessor.from_pretrained(args.humanomniv2_model)
     model = Qwen2_5OmniThinkerForConditionalGeneration.from_pretrained(
@@ -138,37 +138,37 @@ def run_evaluation(args):
         trust_remote_code=True
     )
     model.eval()
-    print("✓ HumanOmniV2模型加载完成\n")
+    print("Omni Thinker model loaded\n")
     
-    # 2. 加载Summarizer模型
+    # 2. Load Summarizer model
     print("="*80)
-    print("Step 2: 加载Thinking Summarizer模型")
+    print("Step 2: Loading Thinking Summarizer model")
     print("="*80)
     summarizer = SummarizerModel(args.base_model, args.lora_model)
     print()
     
-    # 3. 加载测试样本
+    # 3. Load test samples
     print("="*80)
-    print(f"Step 3: 加载测试样本 (前{args.num_samples}个)")
+    print(f"Step 3: Loading test samples (first {args.num_samples})")
     print("="*80)
     test_samples = load_test_samples(args.data_path, args.video_dir, args.num_samples)
-    print(f"✓ 加载了 {len(test_samples)} 个测试样本\n")
+    print(f"Loaded {len(test_samples)} test samples\n")
     
-    # 4. 运行pipeline
+    # 4. Run pipeline
     print("="*80)
-    print("Step 4: 运行完整Pipeline")
+    print("Step 4: Running full pipeline")
     print("="*80)
     
     results = []
     
-    for idx, sample in enumerate(tqdm(test_samples, desc="处理样本")):
+    for idx, sample in enumerate(tqdm(test_samples, desc="Processing samples")):
         print(f"\n{'='*80}")
-        print(f"样本 {idx+1}/{len(test_samples)}")
+        print(f"Sample {idx+1}/{len(test_samples)}")
         print(f"{'='*80}")
         print(f"Question: {sample['question'][:100]}...")
         print(f"Video: {sample['video_path']}")
         
-        # 4.1 构建输入
+        # 4.1 Build input
         message = [
             {
                 "role": "user",
@@ -179,17 +179,17 @@ def run_evaluation(args):
             }
         ]
         
-        # process_mm_info返回(audios, images, videos)
+        # process_mm_info returns (audios, images, videos)
         audios, images, videos = process_mm_info(message, use_audio_in_video=False)
         
-        # 应用chat template
+        # Apply chat template
         text = processor.apply_chat_template(
             message,
             tokenize=False,
             add_generation_prompt=True
         )
         
-        # 构建模型输入
+        # Build model inputs
         model_inputs = processor(
             text=text,
             audio=audios,
@@ -200,8 +200,8 @@ def run_evaluation(args):
             use_audio_in_video=False
         )
         
-        # 4.2 生成thinking
-        print("\n生成thinking...")
+        # 4.2 Generate thinking
+        print("\nGenerating thinking...")
         with torch.inference_mode():
             text_ids = model.generate(
                 **model_inputs.to(model.device).to(model.dtype),
@@ -213,36 +213,36 @@ def run_evaluation(args):
         thinking = extract_think(full_output)
         answer = extract_answer(full_output)
         
-        print(f"✓ Thinking生成完成 (长度: {len(thinking)} 字符)")
-        print(f"✓ Answer: {answer}")
+        print(f"Thinking generated (length: {len(thinking)} chars)")
+        print(f"Answer: {answer}")
         
-        # 打印完整thinking
+        # Print full thinking
         print("\n" + "="*80)
-        print("【原模型完整输出】")
+        print("[Full Model Output]")
         print("="*80)
-        print(f"\n>>> Full Output (长度: {len(full_output)} 字符):\n")
+        print(f"\n>>> Full Output (length: {len(full_output)} chars):\n")
         print(full_output)
         print("\n" + "-"*80)
-        print(f">>> Thinking (长度: {len(thinking)} 字符):\n")
+        print(f">>> Thinking (length: {len(thinking)} chars):\n")
         print(thinking)
         print("\n" + "-"*80)
         print(f">>> Answer:\n")
         print(answer)
         print("="*80)
         
-        # 4.3 总结thinking
-        print("\n总结thinking...")
+        # 4.3 Summarize thinking
+        print("\nSummarizing thinking...")
         summary = summarizer.summarize(thinking)
-        print(f"✓ Summary生成完成 (长度: {len(summary)} 字符)")
+        print(f"Summary generated (length: {len(summary)} chars)")
         
-        # 打印完整summary
+        # Print full summary
         print("\n" + "="*80)
-        print("【Summarizer模型完整输出】")
+        print("[Summarizer Model Output]")
         print("="*80)
         print(summary)
         print("="*80)
         
-        # 保存结果
+        # Save results
         result = {
             'qid': sample['qid'],
             'question': sample['question'],
@@ -255,86 +255,86 @@ def run_evaluation(args):
         }
         results.append(result)
     
-    # 5. 保存结果
+    # 5. Save results
     output_file = args.output_file
     with open(output_file, 'w', encoding='utf-8') as f:
         json.dump(results, f, indent=2, ensure_ascii=False)
     
     print(f"\n{'='*80}")
-    print("Pipeline完成！")
+    print("Pipeline complete!")
     print(f"{'='*80}")
-    print(f"✓ 结果已保存到: {output_file}")
-    print(f"✓ 处理了 {len(results)} 个样本")
+    print(f"Results saved to: {output_file}")
+    print(f"Processed {len(results)} samples")
     
-    # 统计信息
+    # Statistics
     print(f"\n{'='*80}")
-    print("统计信息:")
+    print("Statistics:")
     print(f"{'='*80}")
     avg_thinking_len = sum(len(r['thinking']) for r in results) / len(results)
     avg_summary_len = sum(len(r['summary']) for r in results) / len(results)
     compression_ratio = (1 - avg_summary_len / avg_thinking_len) * 100 if avg_thinking_len > 0 else 0
     
-    print(f"平均Thinking长度: {avg_thinking_len:.0f} 字符")
-    print(f"平均Summary长度: {avg_summary_len:.0f} 字符")
-    print(f"压缩率: {compression_ratio:.1f}%")
-    print(f"\n详细结果已保存到JSON文件，可查看完整内容。")
+    print(f"Average Thinking length: {avg_thinking_len:.0f} chars")
+    print(f"Average Summary length: {avg_summary_len:.0f} chars")
+    print(f"Compression ratio: {compression_ratio:.1f}%")
+    print(f"\nDetailed results saved to JSON file.")
 
 def main():
-    parser = argparse.ArgumentParser(description="集成evaluation: HumanOmniV2 + Summarizer")
+    parser = argparse.ArgumentParser(description="Integrated evaluation: Omni Thinker + Summarizer")
     
-    # HumanOmniV2模型
+    # Omni Thinker model
     parser.add_argument(
         '--humanomniv2-model',
         type=str,
-        default='os.environ.get('MODEL_CHECKPOINT_DIR', './checkpoints')/stage5_outcome_reward/checkpoint-1083',
-        help='HumanOmniV2模型路径'
+        default=os.environ.get('MODEL_CHECKPOINT_DIR', './checkpoints'),
+        help='Path to Omni Thinker model'
     )
     
-    # Summarizer模型
+    # Summarizer model
     parser.add_argument(
         '--base-model',
         type=str,
-        default='${PROJECT_ROOT}/Qwen2.5-3B-Instruct',
-        help='Summarizer基座模型路径'
+        default=os.environ.get('SUMMARIZER_BASE_MODEL', './Qwen2.5-3B-Instruct'),
+        help='Summarizer base model path'
     )
     parser.add_argument(
         '--lora-model',
         type=str,
-        default='${PROJECT_ROOT}/thinking_summarizer/outputs/thinking_summarizer_6770/final_model',
-        help='Summarizer LoRA权重路径'
+        default=os.environ.get('SUMMARIZER_LORA_MODEL', './thinking_summarizer/outputs/final_model'),
+        help='Summarizer LoRA weights path'
     )
     
-    # 数据
+    # Data
     parser.add_argument(
         '--data-path',
         type=str,
-        default='${PROJECT_ROOT}/thinking_summarizer/data/my_demo/demo_test_data.json',
-        help='测试数据路径'
+        default='./data/demo_test_data.json',
+        help='Test data path'
     )
     parser.add_argument(
         '--video-dir',
         type=str,
-        default='${PROJECT_ROOT}/thinking_summarizer/data/my_demo',
-        help='视频文件目录'
+        default='./data/demo_videos',
+        help='Video files directory'
     )
     parser.add_argument(
         '--num-samples',
         type=int,
         default=5,
-        help='测试样本数量'
+        help='Number of test samples'
     )
     
-    # 输出
+    # Output
     parser.add_argument(
         '--output-file',
         type=str,
         default='./outputs/eval_with_summarizer_results.json',
-        help='输出结果文件'
+        help='Output results file'
     )
     
     args = parser.parse_args()
     
-    # 确保输出目录存在
+    # Ensure output directory exists
     os.makedirs(os.path.dirname(args.output_file), exist_ok=True)
     
     run_evaluation(args)

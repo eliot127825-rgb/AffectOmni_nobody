@@ -18,7 +18,7 @@ fi
 RUN_NAME="qwenomni-sft"
 export LOG_PATH="./debug_log_$RUN_NAME.txt"
 
-# 设置 PYTHONPATH，使 Python 能找到 open_r1 模块
+# Set PYTHONPATH so Python can find the open_r1 module
 export PYTHONPATH="$(pwd)/src:$PYTHONPATH"
 
 mkdir -p output/$RUN_NAME/

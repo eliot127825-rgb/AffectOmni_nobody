@@ -1,8 +1,8 @@
 #!/bin/bash
-# Stage 4: 人物关注增强 GRPO 训练 - 改进版
-# 基于 stage4_debug_no_audio_v2.sh 的优化配置
+# Stage 4: People-focus enhanced GRPO training - improved version
+# Optimized config based on stage4_debug_no_audio_v2.sh
 
-echo "🚀 Stage 4 改进训练：提升效果的优化配置"
+echo "Stage 4 improved training: optimized configuration"
 
 DATA_CONFIG="data_config/stage4_people_focus.yaml"
 RUN_NAME="stage4_improved_v1"
@@ -17,7 +17,7 @@ LOG_DIR="log"
 mkdir -p "$LOG_DIR"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 LOG_FILE="${LOG_DIR}/train_${RUN_NAME}_${TIMESTAMP}.log"
-echo "📝 日志将保存到: $LOG_FILE"
+echo "Log will be saved to: $LOG_FILE"
 
 if [ ! -n "$WORLD_SIZE" ] || [ ! -n "$NPROC_PER_NODE" ]; then
     WORLD_SIZE=$ARG_WORLD_SIZE
@@ -37,28 +37,28 @@ export USE_API_REWARD=true
 export USE_COMBINED_REWARD=false
 export DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY:-"your_api_key_here"}
 
-# 输出到data3避免磁盘空间不足
+# Output directory
 OUTPUT_BASE_DIR="${OUTPUT_DIR}"
 mkdir -p $OUTPUT_BASE_DIR/$RUN_NAME
 
-# 使用训练好的checkpoint-380继续训练
+# Continue training from checkpoint-380
 MODEL_PATH="./outputs/stage4_debug_no_audio_v2/checkpoint-380"
 
 echo "=========================================="
-echo "Stage 4: 改进训练配置（基于checkpoint-380）"
+echo "Stage 4: improved training config (from checkpoint-380)"
 echo "=========================================="
-echo "模型: $MODEL_PATH"
-echo "数据: $DATA_CONFIG"
+echo "Model: $MODEL_PATH"
+echo "Data: $DATA_CONFIG"
 echo ""
-echo "📊 关键改进："
-echo "  ✓ num_generations: 4 → 12 (增加候选多样性)"
-echo "  ✓ gradient_accumulation: 4 → 16 (有效batch=64)"
-echo "  ✓ max_completion: 512 → 1024 (更长推理链)"
-echo "  ✓ num_epochs: 1 → 2 (充分训练)"
-echo "  ✓ learning_rate: 默认 → 2e-6 (加快收敛)"
-echo "  ✓ num_iterations: 1 → 2 (GRPO多轮优化)"
-echo "  ✓ beta: 默认0.04 → 0.02 (降低KL惩罚)"
-echo "  ✓ reward: 新增 temporal_order (时序分析约束)"
+echo "Key improvements:"
+echo "  - num_generations: 4 -> 12 (increase candidate diversity)"
+echo "  - gradient_accumulation: 4 -> 16 (effective batch=64)"
+echo "  - max_completion: 512 -> 1024 (longer reasoning chain)"
+echo "  - num_epochs: 1 -> 2 (more thorough training)"
+echo "  - learning_rate: default -> 2e-6 (faster convergence)"
+echo "  - num_iterations: 1 -> 2 (GRPO multi-round optimization)"
+echo "  - beta: default 0.04 -> 0.02 (reduce KL penalty)"
+echo "  - reward: added temporal_order (temporal analysis constraint)"
 echo "=========================================="
 echo ""
 
@@ -69,34 +69,34 @@ torchrun --nproc_per_node $NPROC_PER_NODE --nnodes=$WORLD_SIZE --node_rank=$RANK
     --model_name_or_path $MODEL_PATH \
     --dataset_name $DATA_CONFIG \
     \
-    `# 生成配置 - 核心改进` \
+    `# Generation config - core improvements` \
     --max_prompt_length 2048 \
     --max_completion_length 512 \
     --num_generations 4 \
     \
-    `# 训练配置 - 提升有效batch size和epochs` \
+    `# Training config - increase effective batch size and epochs` \
     --per_device_train_batch_size 1 \
     --gradient_accumulation_steps 16 \
     --num_train_epochs 2 \
     --learning_rate 2e-6 \
     \
-    `# GRPO特有配置 - 优化强化学习` \
+    `# GRPO-specific config - optimize reinforcement learning` \
     --num_iterations 2 \
     --beta 0.02 \
     --epsilon 0.2 \
     \
-    `# Reward配置` \
+    `# Reward config` \
     --reward_funcs format accuracy people_focus temporal_order \
     --scale_rewards false \
     \
-    `# 优化器配置` \
+    `# Optimizer config` \
     --freeze_vision_modules true \
     --gradient_checkpointing true \
     --bf16 \
     --torch_dtype bfloat16 \
     --attn_implementation flash_attention_2 \
     \
-    `# 其他配置` \
+    `# Other config` \
     --use_audio_in_video false \
     --data_seed 42 \
     --logging_steps 1 \
@@ -111,9 +111,9 @@ torchrun --nproc_per_node $NPROC_PER_NODE --nnodes=$WORLD_SIZE --node_rank=$RANK
 
 echo ""
 echo "=========================================="
-echo "✅ 训练完成！"
-echo "输出目录: $OUTPUT_BASE_DIR/$RUN_NAME"
-echo "训练日志: $LOG_FILE"
+echo "Training complete!"
+echo "Output directory: $OUTPUT_BASE_DIR/$RUN_NAME"
+echo "Training log: $LOG_FILE"
 echo "=========================================="
 
 exit ${PIPESTATUS[0]}

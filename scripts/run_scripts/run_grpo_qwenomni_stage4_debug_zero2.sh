@@ -1,8 +1,8 @@
 #!/bin/bash
-# Stage 4: 调试脚本 - 使用 Zero2 替代 Zero3
-# 目的：验证乱码问题是否与 Zero3 参数分片相关
+# Stage 4: Debug script - use Zero2 instead of Zero3
+# Purpose: verify whether garbled output is related to Zero3 parameter sharding
 
-echo "🔧 调试模式：使用 Zero2 替代 Zero3"
+echo "Debug mode: using Zero2 instead of Zero3"
 
 DATA_CONFIG="data_config/stage4_test_single.yaml"
 RUN_NAME="stage4_debug_zero2"
@@ -17,7 +17,7 @@ LOG_DIR="log"
 mkdir -p "$LOG_DIR"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 LOG_FILE="${LOG_DIR}/debug_${RUN_NAME}_${TIMESTAMP}.log"
-echo "📝 日志将保存到: $LOG_FILE"
+echo "Log will be saved to: $LOG_FILE"
 
 if [ ! -n "$WORLD_SIZE" ] || [ ! -n "$NPROC_PER_NODE" ]; then
     WORLD_SIZE=$ARG_WORLD_SIZE
@@ -37,14 +37,14 @@ export PYTHONPATH="${PYTHONPATH}:$(pwd)/src"
 
 mkdir -p ../outputs/$RUN_NAME
 
-MODEL_PATH="${PROJECT_ROOT}/models/HumanOmniV2"
+MODEL_PATH="${PROJECT_ROOT}/models/base_model"
 
 echo "=========================================="
-echo "调试: Zero2 测试"
+echo "Debug: Zero2 test"
 echo "=========================================="
-echo "模型: $MODEL_PATH"
-echo "数据: $DATA_CONFIG"
-echo "关键设置: DeepSpeed Zero2 (而非 Zero3)"
+echo "Model: $MODEL_PATH"
+echo "Data: $DATA_CONFIG"
+echo "Key setting: DeepSpeed Zero2 (instead of Zero3)"
 echo "=========================================="
 echo ""
 
@@ -80,7 +80,7 @@ torchrun --nproc_per_node $NPROC_PER_NODE --nnodes=$WORLD_SIZE --node_rank=$RANK
 
 echo ""
 echo "=========================================="
-echo "调试完成！检查日志: $LOG_FILE"
+echo "Debug complete! Check log: $LOG_FILE"
 echo "=========================================="
 
 exit ${PIPESTATUS[0]}

@@ -1,23 +1,24 @@
 """
-时序分析 Reward 函数
-用于 Stage 4 GRPO 训练，评估模型是否按照视频时间顺序分析内容
+Temporal Order Reward Function
+Used in Stage 4 GRPO training to evaluate whether the model analyzes content
+in chronological video order.
 """
 
 import re
 import os
 import time
 
-# Qwen API 配置
+# LLM API configuration
 api_key = os.environ.get("DASHSCOPE_API_KEY") or os.environ.get("API_KEY", "")
 
 def call_qwen_api(prompt, model_name="qwen-max", max_retries=20):
-    """调用 Qwen API 进行评估（使用 DashScope SDK）"""
+    """Call LLM API for evaluation (using DashScope SDK)"""
     try:
         from dashscope import Generation
         import dashscope
         dashscope.api_key = api_key
     except ImportError:
-        print("警告：未安装 dashscope，降级使用简化版 reward")
+        print("Warning: dashscope not installed, falling back to simplified reward")
         return None
     
     for attempt in range(max_retries):
@@ -29,9 +30,9 @@ def call_qwen_api(prompt, model_name="qwen-max", max_retries=20):
             if response.status_code == 200:
                 return response.output.text
             else:
-                print(f"Qwen API错误 (尝试 {attempt+1}/{max_retries}): {response.message}")
+                print(f"API error (attempt {attempt+1}/{max_retries}): {response.message}")
         except Exception as e:
-            print(f"Qwen API调用失败 (尝试 {attempt+1}/{max_retries}): {e}")
+            print(f"API call failed (attempt {attempt+1}/{max_retries}): {e}")
             time.sleep(1)
     
     return None
@@ -39,63 +40,63 @@ def call_qwen_api(prompt, model_name="qwen-max", max_retries=20):
 
 def temporal_order_reward_simple(completions, **kwargs):
     """
-    简化版时序分析 reward（基于时序关键词检测，不需要API）
-    适合快速训练和调试
+    Simplified temporal order reward (keyword-based detection, no API needed).
+    Suitable for fast training and debugging.
     
-    评估标准：
-    - 检测时序标记词的出现和分布
-    - 评分范围：0.0 - 1.0
+    Evaluation criteria:
+    - Detect presence and distribution of temporal marker words
+    - Score range: 0.0 - 1.0
     """
     
     def extract_thinking(text):
-        """提取 <think> 部分"""
+        """Extract <think> section"""
         pattern = r'<think>(.*?)</think>'
         match = re.search(pattern, text, re.DOTALL)
         return match.group(1).strip() if match else text
     
     def check_temporal_order(text):
-        """检测时序分析特征"""
+        """Detect temporal analysis features"""
         text_lower = text.lower()
         
-        # 时序标记词（强时序感）
+        # Temporal marker words (strong temporal sense)
         temporal_markers = [
-            # 开始
+            # Beginning
             'first', 'initially', 'at the beginning', 'at the start', 'opening',
-            # 进行中
+            # In progress
             'then', 'next', 'after', 'following', 'subsequently', 'later',
             'meanwhile', 'during', 'while', 'as', 'when',
-            # 结束
+            # Ending
             'finally', 'eventually', 'at the end', 'lastly', 'concluding',
-            # 时间点
+            # Time points
             'second', 'minute', 'moment', 'timestamp',
-            # 序列
+            # Sequence
             'before', 'after', 'sequence', 'progression', 'chronological'
         ]
         
-        # 时间段描述
+        # Time period descriptions
         time_phrases = [
-            'at 0:', 'at 1:', 'at 2:', 'at 3:', 'at 4:', 'at 5:',  # 时间戳
+            'at 0:', 'at 1:', 'at 2:', 'at 3:', 'at 4:', 'at 5:',  # timestamps
             'in the first', 'in the second', 'in the third',
             'early in', 'middle of', 'towards the end',
             'throughout the video'
         ]
         
-        # 非时序词（会降低分数）
+        # Non-temporal words (will lower score)
         non_temporal = [
             'overall', 'in general', 'static', 'always', 'entire',
             'whole video', 'throughout without change'
         ]
         
-        # 统计时序标记
+        # Count temporal markers
         temporal_count = sum(1 for marker in temporal_markers if marker in text_lower)
         time_phrase_count = sum(1 for phrase in time_phrases if phrase in text_lower)
         non_temporal_count = sum(1 for word in non_temporal if word in text_lower)
         
-        # 检测是否有明确的段落划分（分步分析）
-        step_indicators = len(re.findall(r'\n\s*\d+[\.\):]|\n\s*-\s+', text))  # 数字列表或破折号
+        # Detect explicit paragraph segmentation (step-by-step analysis)
+        step_indicators = len(re.findall(r'\n\s*\d+[\.\):]|\n\s*-\s+', text))
         
-        # 计算分数
-        # 时序标记词 + 时间短语 + 步骤划分 - 非时序词惩罚
+        # Compute score
+        # temporal markers + time phrases + step segmentation - non-temporal penalty
         temporal_score = (temporal_count * 0.8 + time_phrase_count * 1.5 + step_indicators * 0.3) / 15.0
         non_temporal_penalty = non_temporal_count * 0.1
         
@@ -103,7 +104,7 @@ def temporal_order_reward_simple(completions, **kwargs):
         
         return score
     
-    # 处理每个completion
+    # Process each completion
     contents = [completion[0]["content"] for completion in completions]
     rewards = []
     
@@ -117,73 +118,72 @@ def temporal_order_reward_simple(completions, **kwargs):
 
 def temporal_order_reward_api(completions, **kwargs):
     """
-    高级版时序分析 reward（使用 Qwen API 评估）
-    更准确但更慢，需要配置 API 环境变量
+    Advanced temporal order reward (using LLM API for evaluation).
+    More accurate but slower, requires API environment variables.
     
-    环境变量：
-    - DASHSCOPE_API_KEY: Qwen API key
+    Environment variables:
+    - DASHSCOPE_API_KEY: API key
     
-    评估标准：
-    - 使用大模型判断推理是否按照时间顺序展开
-    - 评分范围：0.0 - 1.0
+    Evaluation criteria:
+    - Use LLM to judge whether reasoning follows chronological order
+    - Score range: 0.0 - 1.0
     """
     
-    # 检查 API 配置
+    # Check API configuration
     if not api_key:
-        print("⚠️  警告：未配置 DASHSCOPE_API_KEY，降级使用简化版 reward")
+        print("Warning: DASHSCOPE_API_KEY not configured, falling back to simplified reward")
         return temporal_order_reward_simple(completions, **kwargs)
     
     def extract_thinking(text):
-        """提取 <think> 部分"""
+        """Extract <think> section"""
         pattern = r'<think>(.*?)</think>'
         match = re.search(pattern, text, re.DOTALL)
         return match.group(1).strip() if match else text
     
     def evaluate_temporal_order(thinking_text):
-        """使用 Qwen API 评估时序分析质量"""
-        prompt = f"""请评估以下推理文本是否**按照视频的时间顺序**进行分析。
+        """Use LLM API to evaluate temporal analysis quality"""
+        prompt = f"""Please evaluate whether the following reasoning text analyzes content **in chronological order of the video**.
 
-评分标准（0-10分）：
-- 10分：非常清晰地按照时间顺序（开始→中间→结束）分析，使用了明确的时序标记（如"首先"、"然后"、"接着"、"最后"），对视频不同时间段的内容进行了分步描述
-- 7-9分：较好地体现了时序性，分析了视频不同阶段的变化，有一定的时序标记
-- 4-6分：有提到时间相关的内容，但分析较为混乱，没有清晰的时间线索
-- 1-3分：基本没有时序分析，主要是静态描述或整体概括
-- 0分：完全没有体现时间顺序，纯静态分析
+Scoring criteria (0-10):
+- 10: Very clearly analyzes in chronological order (beginning -> middle -> end), uses explicit temporal markers (e.g., "first", "then", "next", "finally"), provides step-by-step descriptions of content at different time periods
+- 7-9: Good temporal structure, analyzes changes across different video phases, has some temporal markers
+- 4-6: Mentions some time-related content, but analysis is disorganized without clear temporal thread
+- 1-3: Almost no temporal analysis, mainly static descriptions or overall summaries
+- 0: No temporal order at all, purely static analysis
 
-关键考察点：
-1. 是否明确区分了视频的不同时间段（开始/中间/结束）
-2. 是否使用了时序连接词（首先、然后、接着、最后、之后等）
-3. 是否描述了随时间发生的变化或动作序列
-4. 是否避免了纯静态的整体描述
+Key evaluation points:
+1. Whether different time segments of the video are clearly distinguished (beginning/middle/end)
+2. Whether temporal connectors are used (first, then, next, finally, afterwards, etc.)
+3. Whether changes or action sequences over time are described
+4. Whether purely static overall descriptions are avoided
 
-推理文本：
+Reasoning text:
 {thinking_text[:800]}
 
-请只返回分数（0-10的整数），不要有其他文字。"""
+Please return only the score (integer 0-10), no other text."""
 
         try:
             response = call_qwen_api(prompt)
             if response:
-                # 提取数字
                 score_match = re.search(r'\d+', response)
                 if score_match:
                     score = int(score_match.group())
-                    return max(0, min(10, score)) / 10.0  # 归一化到 [0, 1]
+                    return max(0, min(10, score)) / 10.0  # Normalize to [0, 1]
         except Exception as e:
-            print(f"API评估失败: {e}")
+            print(f"API evaluation failed: {e}")
         
-        # 失败时降级到简化版
+        # Fall back to simplified version on failure
         return check_temporal_simple(thinking_text)
     
     def check_temporal_simple(text):
-        """简化版（API失败时的fallback）"""
+        """Simplified fallback when API fails"""
         text_lower = text.lower()
         temporal_keywords = ['first', 'then', 'next', 'after', 'finally', 
                             'initially', 'subsequently', 'beginning', 'end']
         count = sum(1 for kw in temporal_keywords if kw in text_lower)
         return min(1.0, count / 8.0)
     
-    # 处理每个completion
+    # Process each completion
     contents = [completion[0]["content"] for completion in completions]
     rewards = []
     
@@ -195,12 +195,12 @@ def temporal_order_reward_api(completions, **kwargs):
     return rewards
 
 
-# 默认使用简化版（更快，不需要API）
+# Default to simplified version (faster, no API needed)
 def temporal_order_reward(completions, **kwargs):
     """
-    时序分析 reward（默认使用简化版）
+    Temporal order reward (defaults to simplified version).
     
-    如果需要使用 API 版本，请设置环境变量：
+    To use the API version, set environment variables:
     - export USE_API_REWARD=true
     """
     use_api = os.environ.get("USE_API_REWARD", "false").lower() == "true"

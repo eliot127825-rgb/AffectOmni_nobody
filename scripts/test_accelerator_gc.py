@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 """
-测试 Accelerator + DeepSpeed 环境下 gradient checkpointing 检测问题
+Test gradient checkpointing detection under Accelerator + DeepSpeed environment
 
-运行方式:
+Usage:
   CUDA_VISIBLE_DEVICES=2,3 accelerate launch --num_processes 2 --config_file /dev/null scripts/test_accelerator_gc.py
 """
 import os
@@ -30,12 +30,12 @@ def main():
         "gradient_accumulation_steps": 1,
     }
     
-    # 创建临时 DS config 文件
+    # Create temporary DS config file
     ds_config_path = "/tmp/test_ds_config.json"
     with open(ds_config_path, "w") as f:
         json.dump(ds_config, f)
     
-    # 设置环境变量使 accelerate 使用 DeepSpeed
+    # Set environment variables to make accelerate use DeepSpeed
     os.environ["ACCELERATE_USE_DEEPSPEED"] = "true"
     os.environ["ACCELERATE_DEEPSPEED_CONFIG_FILE"] = ds_config_path
     
@@ -44,7 +44,7 @@ def main():
     
     if is_main:
         print('=' * 70)
-        print('测试 Accelerator + DeepSpeed 环境下 gradient checkpointing 检测')
+        print('Test gradient checkpointing detection under Accelerator + DeepSpeed')
         print('=' * 70)
         print(f'DeepSpeed plugin: {accelerator.state.deepspeed_plugin}')
         if accelerator.state.deepspeed_plugin:
@@ -53,7 +53,7 @@ def main():
     model_path = '${PROJECT_ROOT}/models/HumanOmniV2'
     
     if is_main:
-        print('\n[1] 加载模型...')
+        print('\n[1] Loading model...')
     
     model = Qwen2_5OmniThinkerForConditionalGeneration.from_pretrained(
         model_path,
@@ -62,50 +62,50 @@ def main():
     )
     processor = Qwen2_5OmniProcessor.from_pretrained(model_path, trust_remote_code=True)
     
-    # 检查原始模型状态
+    # Check original model state
     if is_main:
-        print(f'\n[2] 原始模型状态:')
+        print(f'\n[2] Original model state:')
         print(f'  model.is_gradient_checkpointing: {model.is_gradient_checkpointing}')
         print(f'  model.config.use_cache: {model.config.use_cache}')
     
-    # 启用 gradient checkpointing (模拟 trainer)
+    # Enable gradient checkpointing (simulating trainer)
     model.gradient_checkpointing_enable()
     model.config.use_cache = False
     
     if is_main:
-        print(f'\n[3] 启用 gradient_checkpointing 后:')
+        print(f'\n[3] After enabling gradient_checkpointing:')
         print(f'  model.is_gradient_checkpointing: {model.is_gradient_checkpointing}')
         print(f'  model.config.use_cache: {model.config.use_cache}')
     
-    # 使用 Accelerator prepare
+    # Use Accelerator prepare
     if is_main:
-        print(f'\n[4] 使用 Accelerator 准备模型...')
+        print(f'\n[4] Preparing model with Accelerator...')
     
-    # 创建 optimizer (需要for deepspeed)
+    # Create optimizer (needed for deepspeed)
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-5)
     
     model_wrapped, optimizer = accelerator.prepare(model, optimizer)
     
-    # 检查 prepare 后的状态
+    # Check state after prepare
     if is_main:
-        print(f'\n[5] Accelerator prepare 后的模型状态:')
+        print(f'\n[5] Model state after Accelerator prepare:')
         print(f'  type(model_wrapped): {type(model_wrapped)}')
         print(f'  hasattr model_wrapped.is_gradient_checkpointing: {hasattr(model_wrapped, "is_gradient_checkpointing")}')
         if hasattr(model_wrapped, 'is_gradient_checkpointing'):
             print(f'  model_wrapped.is_gradient_checkpointing: {model_wrapped.is_gradient_checkpointing}')
         
-        # 检查 unwrap
+        # Check unwrap
         unwrapped = accelerator.unwrap_model(model_wrapped)
-        print(f'\n  检查 accelerator.unwrap_model:')
+        print(f'\n  Checking accelerator.unwrap_model:')
         print(f'  type(unwrapped): {type(unwrapped)}')
         print(f'  hasattr unwrapped.is_gradient_checkpointing: {hasattr(unwrapped, "is_gradient_checkpointing")}')
         if hasattr(unwrapped, 'is_gradient_checkpointing'):
             print(f'  unwrapped.is_gradient_checkpointing: {unwrapped.is_gradient_checkpointing}')
         print(f'  unwrapped.config.use_cache: {unwrapped.config.use_cache}')
     
-    # 模拟 unwrap_model_for_generation
+    # Simulate unwrap_model_for_generation
     if is_main:
-        print(f'\n[6] 测试 unwrap_model_for_generation:')
+        print(f'\n[6] Testing unwrap_model_for_generation:')
     
     with torch.no_grad():
         with unwrap_model_for_generation(model_wrapped, accelerator) as unwrapped_model:
@@ -115,11 +115,11 @@ def main():
                 if hasattr(unwrapped_model, 'is_gradient_checkpointing'):
                     print(f'  unwrapped_model.is_gradient_checkpointing: {unwrapped_model.is_gradient_checkpointing}')
                 else:
-                    print(f'  ⚠️ unwrapped_model 没有 is_gradient_checkpointing 属性!')
+                    print(f'  ⚠️ unwrapped_model does not have is_gradient_checkpointing attribute!')
                 
                 print(f'  unwrapped_model.config.use_cache: {unwrapped_model.config.use_cache}')
             
-            # 测试禁用 gradient checkpointing
+            # Test disabling gradient checkpointing
             gc_was_enabled = unwrapped_model.is_gradient_checkpointing if hasattr(unwrapped_model, 'is_gradient_checkpointing') else False
             
             if is_main:
@@ -127,19 +127,19 @@ def main():
             
             if gc_was_enabled:
                 if is_main:
-                    print('  正在禁用 gradient checkpointing...')
+                    print('  Disabling gradient checkpointing...')
                 unwrapped_model.gradient_checkpointing_disable()
                 unwrapped_model.config.use_cache = True
                 if is_main:
-                    print(f'  禁用后 is_gradient_checkpointing: {unwrapped_model.is_gradient_checkpointing}')
-                    print(f'  禁用后 config.use_cache: {unwrapped_model.config.use_cache}')
+                    print(f'  After disabling, is_gradient_checkpointing: {unwrapped_model.is_gradient_checkpointing}')
+                    print(f'  After disabling, config.use_cache: {unwrapped_model.config.use_cache}')
             else:
                 if is_main:
-                    print('  ⚠️ gc_was_enabled 为 False，不会禁用 gradient checkpointing!')
+                    print('  ⚠️ gc_was_enabled is False, will not disable gradient checkpointing!')
             
-            # 测试生成
+            # Test generation
             if is_main:
-                print(f'\n[8] 测试纯文本生成...')
+                print(f'\n[8] Testing text-only generation...')
             
             gen_config = GenerationConfig(
                 max_new_tokens=50,
@@ -157,22 +157,22 @@ def main():
             
             if is_main:
                 result = processor.batch_decode(outputs, skip_special_tokens=True)[0]
-                print(f'  结果: {result[:200]}')
+                print(f'  Result: {result[:200]}')
                 
-                # 检查是否有乱码
+                # Check for garbled output
                 if 'system' * 3 in result.lower():
-                    print('  ❌ 检测到乱码!')
+                    print('  ❌ Garbled output detected!')
                 else:
-                    print('  ✅ 输出正常')
+                    print('  ✅ Output is normal')
             
-            # 恢复状态
+            # Restore state
             if gc_was_enabled:
                 unwrapped_model.gradient_checkpointing_enable()
                 unwrapped_model.config.use_cache = False
     
     if is_main:
         print('\n' + '=' * 70)
-        print('测试完成!')
+        print('Test completed!')
         print('=' * 70)
 
 

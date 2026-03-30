@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-测试训练好的LoRA模型
+Test the trained LoRA model.
 """
 
 import json
@@ -8,20 +8,22 @@ import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from peft import PeftModel
 
-# 配置
-BASE_MODEL = "${PROJECT_ROOT}/Qwen2.5-3B-Instruct"
-LORA_MODEL = "${PROJECT_ROOT}/thinking_summarizer/outputs/thinking_summarizer_6770/final_model"
-TEST_DATA = "${PROJECT_ROOT}/thinking_summarizer/data/training_dataset_6770/val.json"
+# Configuration
+BASE_MODEL = os.environ.get("BASE_MODEL_PATH", "./Qwen2.5-3B-Instruct")
+LORA_MODEL = os.environ.get("LORA_MODEL_PATH", "./thinking_summarizer/outputs/final_model")
+TEST_DATA = os.environ.get("TEST_DATA_PATH", "./data/training_dataset/val.json")
 
 print("=" * 80)
-print("测试LoRA模型 - Thinking Summarizer")
+print("Testing LoRA Model - Thinking Summarizer")
 print("=" * 80)
-print(f"基座模型: {BASE_MODEL}")
-print(f"LoRA模型: {LORA_MODEL}")
+print(f"Base model: {BASE_MODEL}")
+print(f"LoRA model: {LORA_MODEL}")
 print("=" * 80)
 
-# 加载模型
-print("\n1. 加载模型...")
+import os
+
+# Load model
+print("\n1. Loading model...")
 tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL, trust_remote_code=True)
 model = AutoModelForCausalLM.from_pretrained(
     BASE_MODEL,
@@ -31,15 +33,15 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 model = PeftModel.from_pretrained(model, LORA_MODEL)
 model.eval()
-print("✓ 模型加载完成")
+print("Model loaded successfully")
 
-# 加载测试数据
-print("\n2. 加载测试数据...")
+# Load test data
+print("\n2. Loading test data...")
 with open(TEST_DATA, 'r', encoding='utf-8') as f:
     test_data = json.load(f)
-print(f"✓ 加载 {len(test_data)} 条验证数据")
+print(f"Loaded {len(test_data)} validation samples")
 
-# 测试函数
+# Test function
 def generate_summary(thinking_text, instruction):
     messages = [
         {"role": "system", "content": "You are a helpful assistant."},
@@ -61,8 +63,8 @@ def generate_summary(thinking_text, instruction):
     summary = tokenizer.decode(outputs[0][len(inputs.input_ids[0]):], skip_special_tokens=True)
     return summary
 
-# 测试3个样本
-print("\n3. 测试模型输出...")
+# Test 3 samples
+print("\n3. Testing model output...")
 print("=" * 80)
 
 for i in range(min(3, len(test_data))):
@@ -71,22 +73,22 @@ for i in range(min(3, len(test_data))):
     instruction = sample['instruction']
     expected = sample['output']
     
-    print(f"\n【测试样本 {i+1}】")
+    print(f"\n[Test Sample {i+1}]")
     print(f"Video ID: {sample['metadata'].get('video_id', 'N/A')}")
-    print(f"来源: {sample['metadata'].get('source', 'N/A')}")
-    print(f"\nThinking (前200字):")
+    print(f"Source: {sample['metadata'].get('source', 'N/A')}")
+    print(f"\nThinking (first 200 chars):")
     print(f"  {thinking[:200]}...")
     
-    # 生成summary
+    # Generate summary
     generated = generate_summary(thinking, instruction)
     
-    print(f"\n生成的Summary:")
+    print(f"\nGenerated Summary:")
     print("-" * 40)
     print(generated[:800])
     print("-" * 40)
     
-    print(f"\n期望的Summary (前300字):")
+    print(f"\nExpected Summary (first 300 chars):")
     print(f"  {expected[:300]}...")
     print("=" * 80)
 
-print("\n✓ 测试完成！")
+print("\nTesting complete!")

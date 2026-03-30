@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""合并4个worker的summary结果"""
+"""Merge summary results from 4 workers"""
 
+import os
 import json
 from pathlib import Path
 
-base_dir = Path('${PROJECT_ROOT}/thinking_summarizer/data/thinking_summaries_6772')
+base_dir = Path(os.environ.get('SUMMARIES_DIR', './data/thinking_summaries'))
 
 all_summaries = []
 for i in range(4):
@@ -13,17 +14,17 @@ for i in range(4):
         with open(file, 'r', encoding='utf-8') as f:
             data = json.load(f)
             all_summaries.extend(data)
-            print(f'Worker {i}: {len(data)} 条')
+            print(f'Worker {i}: {len(data)} entries')
 
 output_file = base_dir / 'summaries_all.json'
 with open(output_file, 'w', encoding='utf-8') as f:
     json.dump(all_summaries, f, indent=2, ensure_ascii=False)
 
-print(f'\n✓ 合并完成，共 {len(all_summaries)} 条')
-print(f'输出文件: {output_file}')
+print(f'\nMerge complete, total {len(all_summaries)} entries')
+print(f'Output file: {output_file}')
 
-# 统计信息
-print(f'\n📊 数据来源统计:')
+# Statistics
+print(f'\nData source statistics:')
 sources = {}
 for item in all_summaries:
     src = item.get('metadata', {}).get('source', 'unknown')

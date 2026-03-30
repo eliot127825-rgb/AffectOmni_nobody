@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-完整Pipeline: HumanOmniV2 -> Summarizer -> SAM3
-使用SAM3官方API进行视频分割
+Full Pipeline: Omni Thinker -> Summarizer -> SAM3
+Uses SAM3 official API for video segmentation.
 """
 import os
 import sys
@@ -18,72 +18,72 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-# 添加SAM3路径
+# Add SAM3 path
 sys.path.insert(0, os.environ.get('SAM3_CODE_PATH', './sam3/sam3_code'))
 
-# 添加eval路径
-sys.path.insert(0, '${PROJECT_ROOT}/src/eval')
+# Add eval path
+sys.path.insert(0, os.environ.get('EVAL_PATH', './eval'))
 from transformers import Qwen2_5OmniThinkerForConditionalGeneration, Qwen2_5OmniProcessor
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from peft import PeftModel
 from qwen_omni_utils import process_mm_info
 
-# 导入SAM3
+# Import SAM3
 from sam3.model_builder import build_sam3_video_predictor
 
 def simplify_prompt_for_sam3(prompt: str) -> str:
     """
-    将复杂的prompt简化为SAM3友好的简单类别名称
+    Simplify a complex prompt to a SAM3-friendly simple category name.
     
     Args:
-        prompt: 原始复杂prompt，如"President John F. Kennedy"
+        prompt: Original complex prompt, e.g. "President John F. Kennedy"
     
     Returns:
-        简化后的prompt，如"person"
+        Simplified prompt, e.g. "person"
     """
     prompt_lower = prompt.lower()
     
-    # 人物相关
+    # People-related
     if any(keyword in prompt_lower for keyword in [
         'president', 'speaker', 'presenter', 'doctor', 'dr.', 'man', 'woman',
         'person', 'people', 'kennedy', 'host', 'announcer', 'reporter'
     ]):
         return "person"
     
-    # 屏幕/显示设备
+    # Screen/display devices
     if any(keyword in prompt_lower for keyword in [
         'television', 'tv', 'monitor', 'display', 'screen', 'broadcast'
     ]):
         return "screen"
     
-    # 产品/物体
+    # Products/objects
     if any(keyword in prompt_lower for keyword in [
         'product', 'bottle', 'container', 'device', 'tool', 'equipment'
     ]):
         return "object"
     
-    # 文字/文本
+    # Text/captions
     if any(keyword in prompt_lower for keyword in [
         'text', 'overlay', 'subtitle', 'caption', 'label', 'title'
     ]):
         return "text"
     
-    # 家具
+    # Furniture
     if any(keyword in prompt_lower for keyword in [
         'table', 'chair', 'desk', 'shelf', 'bookshelf', 'furniture'
     ]):
         return "furniture"
     
-    # 如果没有匹配，返回原prompt（去除修饰词后的核心名词）
-    # 移除形容词和所有格，保留核心名词
+    # If no match, return original prompt with modifiers removed to get core noun
+    # Remove adjectives and possessives, keep core nouns
     simplified = re.sub(r'\b(simulated|vintage|old|new|large|small|big|red|blue)\b', '', prompt_lower).strip()
     simplified = re.sub(r"'s\b", '', simplified).strip()
-    simplified = re.sub(r'\s+', ' ', simplified)  # 合并多余空格
+    simplified = re.sub(r'\s+', ' ', simplified)  # Collapse extra spaces
     
     return simplified if simplified else prompt
 
 def extract_context(output_str):
-    """提取<context>标签中的内容"""
+    """Extract content within <context> tags"""
     pattern = r'<context>\s*(.*?)\s*</context>'
     match = re.search(pattern, output_str, re.DOTALL)
     if match:
@@ -91,7 +91,7 @@ def extract_context(output_str):
     return ""
 
 def extract_think(output_str):
-    """提取<think>标签中的内容"""
+    """Extract content within <think> tags"""
     pattern = r'<think>\s*(.*?)\s*</think>'
     match = re.search(pattern, output_str, re.DOTALL)
     if match:
@@ -99,7 +99,7 @@ def extract_think(output_str):
     return ""
 
 def extract_answer(text):
-    """提取<answer>标签中的内容"""
+    """Extract content within <answer> tags"""
     pattern = r'<answer>\s*(.*?)\s*</answer>'
     match = re.search(pattern, text, re.DOTALL)
     if match:
@@ -107,20 +107,20 @@ def extract_answer(text):
     return ""
 
 def parse_sam3_instructions(summary):
-    """从summary中提取SAM3分割指令"""
+    """Extract SAM3 segmentation instructions from the summary"""
     pattern = r'## SAM3 Segmentation Instructions\s*\n\s*Please segment the following in the video:\s*(.+?)(?:\n\n|\Z)'
     match = re.search(pattern, summary, re.DOTALL | re.IGNORECASE)
     if match:
         objects_str = match.group(1).strip()
-        # 分割对象列表
+        # Split the object list
         objects = [obj.strip() for obj in objects_str.split(',')]
         return objects
     return []
 
 class SummarizerModel:
-    """Summarizer模型封装"""
+    """Summarizer model wrapper"""
     def __init__(self, base_model_path, lora_path):
-        print("加载Summarizer模型...")
+        print("Loading Summarizer model...")
         self.tokenizer = AutoTokenizer.from_pretrained(base_model_path, trust_remote_code=True)
         self.model = AutoModelForCausalLM.from_pretrained(
             base_model_path,
@@ -130,10 +130,10 @@ class SummarizerModel:
         )
         self.model = PeftModel.from_pretrained(self.model, lora_path)
         self.model.eval()
-        print("✓ Summarizer加载完成")
+        print("Summarizer loaded successfully")
     
     def summarize(self, thinking_text):
-        """对thinking进行总结"""
+        """Summarize the thinking process"""
         instruction = """Analyze the following reasoning process and extract structured information.
 
 Output format:
@@ -174,43 +174,43 @@ Please segment the following in the video: [object1], [object2], [object3]"""
         return summary
 
 class SAM3Segmenter:
-    """SAM3视频分割封装"""
+    """SAM3 video segmentation wrapper"""
     def __init__(self, checkpoint_path=None, gpu_id=1):
-        print(f"加载SAM3视频预测器 (GPU {gpu_id})...")
+        print(f"Loading SAM3 video predictor (GPU {gpu_id})...")
         self.gpu_id = gpu_id
         
-        # 临时切换到指定 GPU 加载模型
+        # Temporarily switch to specified GPU for model loading
         import torch
         with torch.cuda.device(gpu_id):
             if checkpoint_path and os.path.exists(checkpoint_path):
-                print(f"  使用本地checkpoint: {checkpoint_path}")
+                print(f"  Using local checkpoint: {checkpoint_path}")
                 self.predictor = build_sam3_video_predictor(checkpoint_path=checkpoint_path)
             else:
-                print("  使用HuggingFace自动下载")
+                print("  Using HuggingFace auto-download")
                 self.predictor = build_sam3_video_predictor()
-            print("✓ SAM3加载完成")
+            print("SAM3 loaded successfully")
     
     def segment_video(self, video_path, text_prompts, max_frames=30):
         """
-        对视频执行SAM3分割
+        Perform SAM3 segmentation on a video.
         
         Args:
-            video_path: 视频文件路径
-            text_prompts: 文本提示列表，如 ["person", "car"]
-            max_frames: 最大处理帧数（默认30帧，约1-2秒视频）
+            video_path: Path to the video file
+            text_prompts: List of text prompts, e.g. ["person", "car"]
+            max_frames: Maximum number of frames to process (default 30)
         
         Returns:
-            分割结果字典，每个prompt的分割结果
+            Segmentation results dict, with results per prompt
         """
-        print(f"\n处理视频: {video_path}")
+        print(f"\nProcessing video: {video_path}")
         
         results_per_prompt = {}
         
         for prompt_idx, text_prompt in enumerate(text_prompts):
-            print(f"\n  [{prompt_idx+1}/{len(text_prompts)}] 分割对象: '{text_prompt}'")
+            print(f"\n  [{prompt_idx+1}/{len(text_prompts)}] Segmenting object: '{text_prompt}'")
             
             try:
-                # 1. 启动session
+                # 1. Start session
                 response = self.predictor.handle_request(
                     request=dict(
                         type="start_session",
@@ -219,7 +219,7 @@ class SAM3Segmenter:
                 )
                 session_id = response["session_id"]
                 
-                # 2. 添加文本prompt在第0帧
+                # 2. Add text prompt at frame 0
                 response = self.predictor.handle_request(
                     request=dict(
                         type="add_prompt",
@@ -228,31 +228,31 @@ class SAM3Segmenter:
                         text=text_prompt,
                     )
                 )
-                print(f"    [调试] add_prompt响应: frame_index={response.get('frame_index')}, outputs keys={list(response.get('outputs', {}).keys())}")
+                print(f"    [debug] add_prompt response: frame_index={response.get('frame_index')}, outputs keys={list(response.get('outputs', {}).keys())}")
                 if 'outputs' in response and 'out_obj_ids' in response['outputs']:
-                    print(f"    [调试] add_prompt返回的out_obj_ids: {response['outputs']['out_obj_ids']}")
+                    print(f"    [debug] add_prompt returned out_obj_ids: {response['outputs']['out_obj_ids']}")
                 
-                # 3. 传播分割到整个视频（这是关键步骤！）
+                # 3. Propagate segmentation to entire video (key step)
                 all_outputs = {}
                 frame_count = 0
                 for result_dict in self.predictor.handle_stream_request(
                     request=dict(
                         type="propagate_in_video",
                         session_id=session_id,
-                        propagation_direction="forward",  # 只向前传播
-                        start_frame_idx=0,  # 从第0帧开始
-                        max_frame_num_to_track=max_frames,  # 限制处理帧数
+                        propagation_direction="forward",  # forward propagation only
+                        start_frame_idx=0,  # start from frame 0
+                        max_frame_num_to_track=max_frames,  # limit number of frames
                     )
                 ):
                     frame_idx = result_dict["frame_index"]
                     outputs = result_dict["outputs"]
                     all_outputs[frame_idx] = outputs
                     frame_count += 1
-                    # 打印前3帧的调试信息
+                    # Print debug info for first 3 frames
                     if frame_count <= 3:
-                        print(f"    [调试] 帧{frame_idx}: outputs keys={list(outputs.keys())}")
+                        print(f"    [debug] frame {frame_idx}: outputs keys={list(outputs.keys())}")
                 
-                # 4. 统计结果
+                # 4. Collect statistics
                 all_object_ids = set()
                 for outputs in all_outputs.values():
                     if "out_obj_ids" in outputs:
@@ -261,26 +261,26 @@ class SAM3Segmenter:
                 num_objects = len(all_object_ids)
                 num_frames = len(all_outputs)
                 
-                # 调试：打印第一帧的outputs结构
+                # Debug: print outputs structure of first frame
                 if 0 in all_outputs:
-                    print(f"    [调试] 第0帧outputs键: {list(all_outputs[0].keys())}")
+                    print(f"    [debug] frame 0 output keys: {list(all_outputs[0].keys())}")
                     if 'out_obj_ids' in all_outputs[0]:
-                        print(f"    [调试] out_obj_ids: {all_outputs[0]['out_obj_ids']}")
+                        print(f"    [debug] out_obj_ids: {all_outputs[0]['out_obj_ids']}")
                     if 'out_binary_masks' in all_outputs[0]:
-                        print(f"    [调试] out_binary_masks shape: {all_outputs[0]['out_binary_masks'].shape if hasattr(all_outputs[0]['out_binary_masks'], 'shape') else 'N/A'}")
+                        print(f"    [debug] out_binary_masks shape: {all_outputs[0]['out_binary_masks'].shape if hasattr(all_outputs[0]['out_binary_masks'], 'shape') else 'N/A'}")
                 
                 results_per_prompt[text_prompt] = {
                     'session_id': session_id,
                     'num_objects': num_objects,
                     'num_frames': num_frames,
                     'object_ids': list(all_object_ids),
-                    'outputs': all_outputs  # 完整输出，包含masks等
+                    'outputs': all_outputs  # Full output including masks etc.
                 }
                 
-                print(f"    ✓ 检测到 {num_objects} 个对象")
-                print(f"    ✓ 处理了 {num_frames} 帧")
+                print(f"    Detected {num_objects} objects")
+                print(f"    Processed {num_frames} frames")
                 
-                # 可视化：保存所有有对象的帧
+                # Visualization: save all frames containing objects
                 if num_objects > 0:
                     frames_with_objects = []
                     for frame_idx in all_outputs.keys():
@@ -288,17 +288,17 @@ class SAM3Segmenter:
                             frames_with_objects.append(frame_idx)
                     
                     if frames_with_objects:
-                        print(f"    [可视化] 保存{len(frames_with_objects)}帧的分割mask")
+                        print(f"    [visualization] Saving segmentation masks for {len(frames_with_objects)} frames")
                         self._save_all_frames_visualization(video_path, all_outputs, frames_with_objects, text_prompt)
                 
             except Exception as e:
-                print(f"    ⚠️ 分割失败: {e}")
+                print(f"    Segmentation failed: {e}")
                 results_per_prompt[text_prompt] = {'error': str(e)}
         
         return results_per_prompt
     
     def _save_all_frames_visualization(self, video_path, all_outputs, frame_indices, prompt):
-        """保存所有有对象的帧的可视化，使用ffmpeg提取正确亮度的帧"""
+        """Save visualization for all frames with objects, using ffmpeg for correct brightness"""
         import subprocess
         import tempfile
         
@@ -306,11 +306,11 @@ class SAM3Segmenter:
         os.makedirs(vis_dir, exist_ok=True)
         video_name = os.path.splitext(os.path.basename(video_path))[0]
         
-        # 使用临时目录存储ffmpeg提取的帧
+        # Use temp directory to store ffmpeg-extracted frames
         with tempfile.TemporaryDirectory() as tmp_dir:
-            # 用ffmpeg提取所有有对象的帧
-            for frame_idx in frame_indices:  # 保存所有帧
-                # 使用ffmpeg提取指定帧
+            # Extract all frames with objects using ffmpeg
+            for frame_idx in frame_indices:
+                # Extract specified frame using ffmpeg
                 output_frame = os.path.join(tmp_dir, f"frame_{frame_idx}.jpg")
                 cmd = [
                     'ffmpeg', '-i', video_path,
@@ -321,99 +321,99 @@ class SAM3Segmenter:
                 ]
                 subprocess.run(cmd, check=True)
                 
-                # 读取ffmpeg提取的帧
+                # Read the ffmpeg-extracted frame
                 frame = cv2.imread(output_frame)
                 if frame is None:
                     continue
                 
-                # 获取该帧的masks
+                # Get masks for this frame
                 outputs = all_outputs[frame_idx]
                 if 'out_binary_masks' not in outputs or len(outputs['out_binary_masks']) == 0:
                     continue
                 
                 masks = outputs['out_binary_masks']
                 
-                # 为每个对象保存mask overlay
+                # Save mask overlay for each object
                 for obj_idx, mask in enumerate(masks):
                     mask_np = mask.cpu().numpy() if torch.is_tensor(mask) else mask
                     
-                    # 创建overlay：原始帧 + mask高亮
+                    # Create overlay: original frame + mask highlight
                     overlay = frame.copy()
                     color = np.array([0, 255, 0], dtype=np.float32)
                     mask_bool = mask_np > 0
                     overlay[mask_bool] = (overlay[mask_bool] * 0.5 + color * 0.5).astype(np.uint8)
                     
-                    # 保存
+                    # Save
                     output_path = os.path.join(vis_dir, f"{video_name}_frame{frame_idx}_{prompt}_obj{obj_idx}.jpg")
                     cv2.imwrite(output_path, overlay)
                 
-                print(f"      ✓ 帧{frame_idx}: {len(masks)}个对象")
+                print(f"      Frame {frame_idx}: {len(masks)} objects")
     
     def _save_visualization(self, video_path, outputs, prompt, frame_idx):
-        """保存指定帧的分割mask可视化"""
+        """Save segmentation mask visualization for a specified frame"""
         try:
-            # 读取指定帧
+            # Read specified frame
             cap = cv2.VideoCapture(video_path)
             cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
             ret, frame = cap.read()
             cap.release()
             if not ret:
-                print(f"    ⚠️ 无法读取帧{frame_idx}")
+                print(f"    Cannot read frame {frame_idx}")
                 return
             
-            # 不使用TV range转换，直接使用原始帧（因为转换后反而更暗）
+            # Use original frame directly without TV range conversion
             
-            # 获取masks
+            # Get masks
             if 'out_binary_masks' not in outputs or len(outputs['out_binary_masks']) == 0:
                 return
             
-            masks = outputs['out_binary_masks']  # shape: (N, H, W) N个对象
+            masks = outputs['out_binary_masks']  # shape: (N, H, W) N objects
             
-            # 创建输出目录
+            # Create output directory
             vis_dir = './outputs/sam3_visualizations'
             os.makedirs(vis_dir, exist_ok=True)
             
-            # 为每个对象保存mask
+            # Save mask for each object
             video_name = os.path.splitext(os.path.basename(video_path))[0]
             for obj_idx, mask in enumerate(masks):
-                # 转换mask为彩色overlay
+                # Convert mask to color overlay
                 mask_np = mask.cpu().numpy() 
                 
-                # 创建可视化：背景激进提亮 + mask高亮
-                # 先将原始帧提亮4倍以解决暗场景问题
+                # Create visualization: aggressively brighten background + mask highlight
+                # Brighten original frame 4x to handle dark scenes
                 overlay = np.clip(frame.astype(np.float32) * 4.0, 0, 255).astype(np.uint8)
-                color = np.array([0, 255, 0], dtype=np.float32)  # 绿色
+                color = np.array([0, 255, 0], dtype=np.float32)  # green
                 
-                # 在mask区域叠加高亮颜色
+                # Overlay highlight color on mask region
                 mask_bool = mask_np > 0
                 overlay[mask_bool] = (overlay[mask_bool] * 0.4 + color * 0.6).astype(np.uint8)
                 
-                # 保存
+                # Save
                 output_path = os.path.join(vis_dir, f"{video_name}_{prompt}_obj{obj_idx}.jpg")
                 cv2.imwrite(output_path, overlay)
-                print(f"    ✓ 保存可视化: {output_path}")
+                print(f"    Saved visualization: {output_path}")
         except Exception as e:
-            print(f"    ⚠️ 可视化保存失败: {e}")
+            print(f"    Visualization save failed: {e}")
 
 def load_test_samples(data_path, num_samples=3):
-    """加载测试样本"""
+    """Load test samples"""
     with open(data_path) as f:
         data = json.load(f)
     
-    # 获取数据目录（用于构建视频完整路径）
+    # Get data directory (for constructing full video paths)
     data_dir = os.path.dirname(data_path)
     
     samples = []
     for item in data[:num_samples]:
-        # 支持两种格式：video_path（完整路径）或 video（文件名）
+        # Support two formats: video_path (full path) or video (filename)
         video_path = item.get('video_path', '')
         if not video_path:
             video_name = item.get('video', '')
             if video_name:
-                # 尝试在数据目录下找视频
+                # Try to find video in data directory
                 video_path = os.path.join(data_dir, video_name)
         
-        # 支持两种格式：question 或 problem + options
+        # Support two formats: question or problem + options
         question = item.get('question', '')
         if not question:
             problem = item.get('problem', '')
@@ -433,11 +433,11 @@ def load_test_samples(data_path, num_samples=3):
     return samples
 
 def run_full_pipeline(args):
-    """运行完整的pipeline"""
+    """Run the full pipeline"""
     
-    # 1. 加载HumanOmniV2模型
+    # 1. Load Omni Thinker model
     print("="*80)
-    print("Step 1: 加载HumanOmniV2 Thinker模型")
+    print("Step 1: Loading Omni Thinker model")
     print("="*80)
     processor = Qwen2_5OmniProcessor.from_pretrained(args.humanomniv2_model)
     model = Qwen2_5OmniThinkerForConditionalGeneration.from_pretrained(
@@ -447,53 +447,53 @@ def run_full_pipeline(args):
         trust_remote_code=True
     )
     model.eval()
-    print("✓ HumanOmniV2模型加载完成\n")
+    print("Omni Thinker model loaded\n")
     
-    # 2. 加载Summarizer模型
+    # 2. Load Summarizer model
     print("="*80)
-    print("Step 2: 加载Thinking Summarizer模型")
+    print("Step 2: Loading Thinking Summarizer model")
     print("="*80)
     summarizer = SummarizerModel(args.base_model, args.lora_model)
     print()
     
-    # 3. SAM3 将在主模型推理完成后加载（避免显存冲突）
+    # 3. SAM3 will be loaded after main model inference (to avoid VRAM conflicts)
     print("="*80)
-    print("Step 3: SAM3分割模型（将在推理完成后加载）")
+    print("Step 3: SAM3 segmentation model (will load after inference)")
     print("="*80)
-    sam3 = None  # 延迟加载
+    sam3 = None  # Lazy loading
     sam3_checkpoint_path = None
     if args.enable_sam3:
         sam3_checkpoint_path = os.path.join(args.sam3_model, "sam3.pt")
         if not os.path.exists(sam3_checkpoint_path):
-            print(f"⚠️ 本地checkpoint不存在: {sam3_checkpoint_path}")
+            print(f"Local checkpoint does not exist: {sam3_checkpoint_path}")
             sam3_checkpoint_path = None
-        print("✓ SAM3 将在主模型释放显存后加载")
+        print("SAM3 will load after main model releases VRAM")
     else:
-        print("✓ 跳过SAM3")
+        print("Skipping SAM3")
     print()
     
-    # 4. 加载测试样本
+    # 4. Load test samples
     print("="*80)
-    print(f"Step 4: 加载测试样本 (前{args.num_samples}个)")
+    print(f"Step 4: Loading test samples (first {args.num_samples})")
     print("="*80)
     test_samples = load_test_samples(args.data_path, args.num_samples)
-    print(f"✓ 加载了 {len(test_samples)} 个测试样本\n")
+    print(f"Loaded {len(test_samples)} test samples\n")
     
-    # 5. 运行完整pipeline
+    # 5. Run full pipeline
     print("="*80)
-    print("Step 5: 运行完整Pipeline")
+    print("Step 5: Running full pipeline")
     print("="*80)
     
     results = []
     
     for idx, sample in enumerate(test_samples):
         print(f"\n{'='*80}")
-        print(f"样本 {idx+1}/{len(test_samples)}")
+        print(f"Sample {idx+1}/{len(test_samples)}")
         print(f"{'='*80}")
         print(f"Question: {sample['question'][:100]}...")
         print(f"Video: {sample['video_path']}")
         
-        # 5.1 构建输入（限制视频帧数防止token过长）
+        # 5.1 Build input (limit video frames to prevent token overflow)
         message = [
             {
                 "role": "user",
@@ -504,7 +504,7 @@ def run_full_pipeline(args):
             }
         ]
         
-        print(f"  视频最大帧数: {args.video_max_frames}")
+        print(f"  Video max frames: {args.video_max_frames}")
         audios, images, videos = process_mm_info(message, use_audio_in_video=False)
         text = processor.apply_chat_template(message, tokenize=False, add_generation_prompt=True)
         model_inputs = processor(
@@ -517,8 +517,8 @@ def run_full_pipeline(args):
             use_audio_in_video=False
         )
         
-        # 5.2 生成thinking
-        print("\n[1/3] 生成thinking...")
+        # 5.2 Generate thinking
+        print("\n[1/3] Generating thinking...")
         with torch.inference_mode():
             text_ids = model.generate(
                 **model_inputs.to(model.device).to(model.dtype),
@@ -531,51 +531,51 @@ def run_full_pipeline(args):
         thinking = extract_think(full_output)
         answer = extract_answer(full_output)
         
-        print(f"✓ Context生成完成 (长度: {len(context)} 字符)")
-        print(f"✓ Thinking生成完成 (长度: {len(thinking)} 字符)")
-        print(f"✓ Answer: {answer}")
+        print(f"Context generated (length: {len(context)} chars)")
+        print(f"Thinking generated (length: {len(thinking)} chars)")
+        print(f"Answer: {answer}")
         
-        # 5.3 总结thinking
-        print("\n[2/3] 总结thinking...")
+        # 5.3 Summarize thinking
+        print("\n[2/3] Summarizing thinking...")
         summary = summarizer.summarize(thinking)
-        print(f"✓ Summary生成完成 (长度: {len(summary)} 字符)")
+        print(f"Summary generated (length: {len(summary)} chars)")
         
-        # 提取SAM3指令
+        # Extract SAM3 instructions
         sam3_objects = parse_sam3_instructions(summary)
-        print(f"✓ 提取SAM3分割对象: {sam3_objects}")
+        print(f"Extracted SAM3 segmentation objects: {sam3_objects}")
         
-        # 简化prompt为SAM3友好的类别
+        # Simplify prompts to SAM3-friendly categories
         sam3_objects_simplified = []
         if sam3_objects:
-            print("\n简化prompt:")
+            print("\nSimplifying prompts:")
             for obj in sam3_objects:
                 simplified = simplify_prompt_for_sam3(obj)
                 sam3_objects_simplified.append(simplified)
                 print(f"  '{obj}' -> '{simplified}'")
-            # 去重
+            # Deduplicate
             sam3_objects_simplified = list(dict.fromkeys(sam3_objects_simplified))
-            print(f"✓ 简化后对象: {sam3_objects_simplified}")
+            print(f"Simplified objects: {sam3_objects_simplified}")
             
-            # 为防止OOM，只处理第一个对象
+            # Process only the first object to prevent OOM
             if len(sam3_objects_simplified) > 1:
-                print(f"⚠️ 为防止OOM，仅处理第一个对象: '{sam3_objects_simplified[0]}'")
+                print(f"To prevent OOM, only processing the first object: '{sam3_objects_simplified[0]}'")
                 sam3_objects_simplified = [sam3_objects_simplified[0]]
         
-        # 5.4 暂存 SAM3 分割任务（稍后执行）
+        # 5.4 Store SAM3 segmentation tasks (to execute later)
         sam3_results = None
         if sam3_objects_simplified and args.enable_sam3:
-            print(f"\n[3/3] SAM3分割任务已记录（将在主模型释放后执行）")
+            print(f"\n[3/3] SAM3 segmentation task recorded (will execute after main model release)")
         else:
-            print(f"\n[3/3] 跳过SAM3分割 (enable_sam3={args.enable_sam3}, has_objects={bool(sam3_objects)})")
+            print(f"\n[3/3] Skipping SAM3 segmentation (enable_sam3={args.enable_sam3}, has_objects={bool(sam3_objects)})")
         
-        # 保存结果
+        # Save results
         result = {
             'sample_id': idx + 1,
             'qid': sample['qid'],
             'question': sample['question'],
             'video_path': sample['video_path'],
             'ground_truth': sample['solution'],
-            'full_output': full_output,  # 完整模型输出（含<context>、<think>和<answer>标签）
+            'full_output': full_output,  # Full model output (with <context>, <think> and <answer> tags)
             'context': context,
             'thinking': thinking,
             'answer': answer,
@@ -593,63 +593,63 @@ def run_full_pipeline(args):
         }
         results.append(result)
         
-        print(f"\n✓ 样本 {idx+1} 处理完成")
+        print(f"\nSample {idx+1} processing complete")
     
-    # 6. 释放主模型显存，执行 SAM3 分割
+    # 6. Release main model VRAM, execute SAM3 segmentation
     if args.enable_sam3 and sam3_checkpoint_path:
         print("\n" + "="*80)
-        print("Step 6: 释放主模型显存，加载SAM3执行分割")
+        print("Step 6: Releasing main model VRAM, loading SAM3 for segmentation")
         print("="*80)
         
-        # 释放 HumanOmniV2 和 Summarizer 显存
-        print("释放主模型显存...")
+        # Release main model and Summarizer VRAM
+        print("Releasing main model VRAM...")
         del model
         del processor
         del summarizer
         import gc
         gc.collect()
         
-        # 彻底清理 CUDA 状态
-        print("彻底清理CUDA状态...")
+        # Thoroughly clean CUDA state
+        print("Cleaning up CUDA state...")
         for i in range(torch.cuda.device_count()):
             with torch.cuda.device(i):
                 torch.cuda.empty_cache()
                 torch.cuda.synchronize()
         
-        # 重置默认设备到 SAM3 的 GPU
+        # Reset default device to SAM3 GPU
         torch.cuda.set_device(args.sam3_gpu)
-        print(f"✓ 主模型显存已释放，CUDA 默认设备设为 GPU {args.sam3_gpu}")
+        print(f"Main model VRAM released, CUDA default device set to GPU {args.sam3_gpu}")
         
-        # 加载 SAM3
-        print(f"\n加载SAM3模型 (GPU {args.sam3_gpu})...")
+        # Load SAM3
+        print(f"\nLoading SAM3 model (GPU {args.sam3_gpu})...")
         sam3 = SAM3Segmenter(checkpoint_path=sam3_checkpoint_path, gpu_id=args.sam3_gpu)
         
-        # 执行所有样本的 SAM3 分割
-        print("\n执行SAM3分割任务...")
+        # Execute SAM3 segmentation for all samples
+        print("\nExecuting SAM3 segmentation tasks...")
         for idx, result in enumerate(results):
             sam3_objects = result.get('sam3_objects', [])
             if not sam3_objects:
                 continue
             
-            # 简化 prompt
+            # Simplify prompts
             sam3_objects_simplified = []
             for obj in sam3_objects:
                 simplified = simplify_prompt_for_sam3(obj)
                 sam3_objects_simplified.append(simplified)
             sam3_objects_simplified = list(dict.fromkeys(sam3_objects_simplified))
             
-            # 只处理第一个对象
+            # Only process the first object
             if len(sam3_objects_simplified) > 1:
                 sam3_objects_simplified = [sam3_objects_simplified[0]]
             
-            print(f"\n处理样本 {idx+1}: {sam3_objects_simplified}")
+            print(f"\nProcessing sample {idx+1}: {sam3_objects_simplified}")
             try:
                 sam3_results = sam3.segment_video(
                     result['video_path'],
                     sam3_objects_simplified,
                     max_frames=args.max_frames
                 )
-                # 更新结果
+                    # Update results
                 results[idx]['sam3_results_summary'] = {
                     prompt: {
                         'num_objects': data.get('num_objects', 0),
@@ -660,15 +660,15 @@ def run_full_pipeline(args):
                     for prompt, data in (sam3_results or {}).items()
                 }
             except Exception as e:
-                print(f"⚠️ SAM3分割失败: {e}")
+                print(f"SAM3 segmentation failed: {e}")
                 results[idx]['sam3_results_summary'] = {'error': str(e)}
         
-        print("\n✓ SAM3分割完成")
+        print("\nSAM3 segmentation complete")
     
-    # 7. 保存结果（移除不能JSON序列化的outputs字段）
+    # 7. Save results (remove non-JSON-serializable output fields)
     output_file = os.path.join(args.output_dir, "full_pipeline_results.json")
     
-    # 清理results，移除outputs中的masks等大型数据
+    # Clean results, remove large data like masks from outputs
     cleaned_results = []
     for result in results:
         cleaned_result = result.copy()
@@ -689,49 +689,49 @@ def run_full_pipeline(args):
         json.dump(cleaned_results, f, indent=2, ensure_ascii=False)
     
     print(f"\n{'='*80}")
-    print("Pipeline完成！")
+    print("Pipeline complete!")
     print(f"{'='*80}")
-    print(f"✓ 结果已保存到: {output_file}")
-    print(f"✓ 处理了 {len(results)} 个样本")
+    print(f"Results saved to: {output_file}")
+    print(f"Processed {len(results)} samples")
 
 def main():
-    parser = argparse.ArgumentParser(description="完整Pipeline: HumanOmniV2 + Summarizer + SAM3")
+    parser = argparse.ArgumentParser(description="Full Pipeline: Omni Thinker + Summarizer + SAM3")
     
-    # HumanOmniV2模型
+    # Omni Thinker model
     parser.add_argument('--humanomniv2-model', type=str, 
-                        default='os.environ.get('MODEL_CHECKPOINT_DIR', './checkpoints')/stage5_outcome_reward/checkpoint-1083')
+                        default=os.environ.get('MODEL_CHECKPOINT_DIR', './checkpoints'))
     
-    # Summarizer模型
+    # Summarizer model
     parser.add_argument('--base-model', type=str,
-                        default='${PROJECT_ROOT}/Qwen2.5-3B-Instruct')
+                        default=os.environ.get('SUMMARIZER_BASE_MODEL', './Qwen2.5-3B-Instruct'))
     parser.add_argument('--lora-model', type=str,
-                        default='${PROJECT_ROOT}/thinking_summarizer/outputs/thinking_summarizer_6770/final_model')
+                        default=os.environ.get('SUMMARIZER_LORA_MODEL', './thinking_summarizer/outputs/final_model'))
     
-    # SAM3模型
+    # SAM3 model
     parser.add_argument('--sam3-model', type=str,
-                        default='os.environ.get('SAM3_CHECKPOINT_DIR', './sam3/checkpoints')')
+                        default=os.environ.get('SAM3_CHECKPOINT_DIR', './sam3/checkpoints'))
     parser.add_argument('--enable-sam3', action='store_true', default=False,
-                        help='是否启用SAM3分割')
+                        help='Enable SAM3 segmentation')
     parser.add_argument('--max-frames', type=int, default=None,
-                        help='SAM3处理的最大帧数（默认处理所有帧）')
+                        help='Max frames for SAM3 processing (default: all frames)')
     parser.add_argument('--sam3-gpu', type=int, default=1,
-                        help='SAM3使用的GPU ID（默认1）')
+                        help='GPU ID for SAM3 (default: 1)')
     
-    # 视频处理
+    # Video processing
     parser.add_argument('--video-max-frames', type=int, default=64,
-                        help='HumanOmniV2处理视频的最大帧数（默认64，防止token过长）')
+                        help='Max video frames for Omni Thinker (default: 64)')
     
-    # 数据
+    # Data
     parser.add_argument('--data-path', type=str,
-                        default='${PROJECT_ROOT}/thinking_summarizer/data/my_demo/demo_test_data.json')
+                        default='./data/demo_test_data.json')
     parser.add_argument('--num-samples', type=int, default=1,
-                        help='测试样本数量')
+                        help='Number of test samples')
     
-    # 输出
+    # Output
     parser.add_argument('--output-dir', type=str,
                         default='./outputs/full_pipeline')
     parser.add_argument('--visualize', action='store_true', default=True,
-                        help='是否可视化SAM3结果')
+                        help='Visualize SAM3 results')
     
     args = parser.parse_args()
     

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Thinking Summarizer 训练启动脚本
+# Thinking Summarizer training launch script
 
 export CUDA_VISIBLE_DEVICES=0
 

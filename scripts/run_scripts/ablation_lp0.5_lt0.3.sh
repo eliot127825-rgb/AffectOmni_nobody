@@ -1,14 +1,14 @@
 #!/bin/bash
-# 消融实验：λp=0.5, λt=0.3
+# Ablation experiment: lambda_p=0.5, lambda_t=0.3
 
-# 固定参数
-LAMBDA_P=0.5        # people_focus 权重
-LAMBDA_T=0.3        # temporal_order 权重
-LAMBDA_ACC=0.4      # accuracy 权重
-LAMBDA_THINK=0.2    # thinking_focus 权重
+# Fixed parameters
+LAMBDA_P=0.5        # people_focus weight
+LAMBDA_T=0.3        # temporal_order weight
+LAMBDA_ACC=0.4      # accuracy weight
+LAMBDA_THINK=0.2    # thinking_focus weight
 
 echo "=========================================="
-echo "🔬 消融实验：λp=0.5, λt=0.3"
+echo "Ablation experiment: lp=0.5, lt=0.3"
 echo "=========================================="
 echo "λ_accuracy     = $LAMBDA_ACC"
 echo "λ_thinking     = $LAMBDA_THINK"
@@ -29,7 +29,7 @@ LOG_DIR="${OUTPUT_DIR}/logs"
 mkdir -p "$LOG_DIR"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 LOG_FILE="${LOG_DIR}/ablation_${RUN_NAME}_${TIMESTAMP}.log"
-echo "📝 日志将保存到: $LOG_FILE"
+echo "Log will be saved to: $LOG_FILE"
 
 if [ ! -n "$WORLD_SIZE" ] || [ ! -n "$NPROC_PER_NODE" ]; then
     WORLD_SIZE=$ARG_WORLD_SIZE
@@ -50,11 +50,11 @@ export USE_API_REWARD=true
 export USE_COMBINED_REWARD=false
 export DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY:-"your_api_key_here"}
 
-# 输出目录
+# Output directory
 OUTPUT_BASE_DIR="${OUTPUT_DIR}"
 mkdir -p $OUTPUT_BASE_DIR/$RUN_NAME
 
-# 使用checkpoint-380作为起点
+# Use checkpoint-380 as starting point
 MODEL_PATH="./outputs/stage4_debug_no_audio_v2/checkpoint-380"
 
 torchrun --nproc_per_node $NPROC_PER_NODE --nnodes=$WORLD_SIZE --node_rank=$RANK --master_addr=$MASTER_ADDR --master_port=$MASTER_PORT \
@@ -64,35 +64,35 @@ torchrun --nproc_per_node $NPROC_PER_NODE --nnodes=$WORLD_SIZE --node_rank=$RANK
     --model_name_or_path $MODEL_PATH \
     --dataset_name $DATA_CONFIG \
     \
-    `# 生成配置` \
+    `# Generation config` \
     --max_prompt_length 2048 \
     --max_completion_length 512 \
     --num_generations 4 \
     \
-    `# 训练配置` \
+    `# Training config` \
     --per_device_train_batch_size 1 \
     --gradient_accumulation_steps 4 \
     --num_train_epochs 1 \
     --learning_rate 1e-6 \
     \
-    `# GRPO配置` \
+    `# GRPO config` \
     --num_iterations 1 \
     --beta 0.02 \
     --epsilon 0.2 \
     \
-    `# Reward配置 - 使用传入的权重` \
+    `# Reward config - using provided weights` \
     --reward_funcs accuracy thinking_focus people_focus temporal_order \
     --reward_weights $LAMBDA_ACC $LAMBDA_THINK $LAMBDA_P $LAMBDA_T \
     --scale_rewards false \
     \
-    `# 优化器配置` \
+    `# Optimizer config` \
     --freeze_vision_modules true \
     --gradient_checkpointing true \
     --bf16 \
     --torch_dtype bfloat16 \
     --attn_implementation flash_attention_2 \
     \
-    `# 其他配置` \
+    `# Other config` \
     --use_audio_in_video false \
     --data_seed 42 \
     --logging_steps 1 \
@@ -108,13 +108,13 @@ torchrun --nproc_per_node $NPROC_PER_NODE --nnodes=$WORLD_SIZE --node_rank=$RANK
 echo ""
 echo "=========================================="
 if [ ${PIPESTATUS[0]} -eq 0 ]; then
-    echo "✅ 实验完成！"
+    echo "Experiment complete!"
 else
-    echo "❌ 实验失败，请检查错误日志"
+    echo "Experiment failed, please check error logs"
 fi
-echo "实验配置: λp=$LAMBDA_P, λt=$LAMBDA_T"
-echo "输出目录: $OUTPUT_BASE_DIR/$RUN_NAME"
-echo "训练日志: $LOG_FILE"
+echo "Experiment config: lp=$LAMBDA_P, lt=$LAMBDA_T"
+echo "Output directory: $OUTPUT_BASE_DIR/$RUN_NAME"
+echo "Training log: $LOG_FILE"
 echo "=========================================="
 
 exit ${PIPESTATUS[0]}

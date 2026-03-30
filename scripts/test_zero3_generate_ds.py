@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 """
-测试 DeepSpeed Zero3 + Qwen2.5-Omni 生成（使用真正的 DeepSpeed 配置）
-单卡测试多模态:
+Test DeepSpeed Zero3 + model generation (using real DeepSpeed config)
+Single-GPU multimodal test:
   python scripts/test_zero3_generate_ds.py --mode single_multimodal
   
-多卡 Zero3 测试:
+Multi-GPU Zero3 test:
   CUDA_VISIBLE_DEVICES=0,1 deepspeed --num_gpus 2 scripts/test_zero3_generate_ds.py --mode zero3
 """
 import argparse
@@ -16,15 +16,15 @@ import torch
 from transformers import Qwen2_5OmniThinkerForConditionalGeneration, Qwen2_5OmniProcessor, GenerationConfig
 
 def test_single_multimodal():
-    """单卡多模态测试"""
+    """Single-GPU multimodal test"""
     print('=' * 60)
-    print('测试模式: 单卡多模态')
+    print('Test mode: Single-GPU multimodal')
     print('=' * 60)
     
     model_path = '${PROJECT_ROOT}/models/HumanOmniV2'
     test_video = "${PROJECT_ROOT}/data/videos/MER24/sample_00000033.mp4"
     
-    print('加载模型...')
+    print('Loading model...')
     model = Qwen2_5OmniThinkerForConditionalGeneration.from_pretrained(
         model_path,
         torch_dtype=torch.bfloat16,
@@ -33,8 +33,8 @@ def test_single_multimodal():
     )
     processor = Qwen2_5OmniProcessor.from_pretrained(model_path, trust_remote_code=True)
     
-    # 模拟训练脚本的设置
-    print('启用 gradient_checkpointing...')
+    # Simulate training script setup
+    print('Enabling gradient_checkpointing...')
     model.gradient_checkpointing_enable()
     model.config.use_cache = False
     print(f'use_cache: {model.config.use_cache}')
@@ -48,8 +48,8 @@ def test_single_multimodal():
         eos_token_id=processor.tokenizer.eos_token_id,
     )
     
-    # 测试1: 纯文本
-    print('\n=== 测试1: 纯文本 ===')
+    # Test 1: Text-only
+    print('\n=== Test 1: Text-only ===')
     text1 = '<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n<|im_start|>user\nWhat is 2+2?<|im_end|>\n<|im_start|>assistant\n'
     inputs1 = processor(text=[text1], return_tensors='pt', padding=True)
     inputs1 = {k: v.to(model.device) if hasattr(v, 'to') else v for k, v in inputs1.items()}
@@ -57,11 +57,11 @@ def test_single_multimodal():
     with torch.no_grad():
         outputs1 = model.generate(**inputs1, generation_config=gen_config)
     result1 = processor.batch_decode(outputs1, skip_special_tokens=True)[0]
-    print(f'结果: {result1[:200]}')
+    print(f'Result: {result1[:200]}')
     check_garbled(result1)
     
-    # 测试2: 带视频（使用 use_audio_in_video=True）
-    print('\n=== 测试2: 带视频 (use_audio_in_video=True) ===')
+    # Test 2: With video (using use_audio_in_video=True)
+    print('\n=== Test 2: With video (use_audio_in_video=True) ===')
     text2 = '<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n<|im_start|>user\n<|vision_bos|><|VIDEO|><|vision_eos|>\nDescribe what you see.<|im_end|>\n<|im_start|>assistant\n'
     
     inputs2 = processor(
@@ -82,16 +82,16 @@ def test_single_multimodal():
     with torch.no_grad():
         outputs2 = model.generate(**inputs2, generation_config=gen_config)
     result2 = processor.batch_decode(outputs2, skip_special_tokens=True)[0]
-    print(f'结果: {result2[:500]}')
+    print(f'Result: {result2[:500]}')
     check_garbled(result2)
     
     print('\n' + '=' * 60)
-    print('单卡多模态测试完成')
+    print('Single-GPU multimodal test completed')
     print('=' * 60)
 
 
 def test_zero3():
-    """使用 DeepSpeed Zero3 测试"""
+    """Test with DeepSpeed Zero3"""
     import deepspeed
     
     ds_config = {
@@ -117,7 +117,7 @@ def test_zero3():
     
     if is_main:
         print('=' * 60)
-        print('测试 DeepSpeed Zero3 (仅纯文本)')
+        print('Test DeepSpeed Zero3 (text-only)')
         print('=' * 60)
     
     deepspeed.init_distributed()
@@ -144,9 +144,9 @@ def test_zero3():
         eos_token_id=processor.tokenizer.eos_token_id,
     )
     
-    # 纯文本测试
+    # Text-only test
     if is_main:
-        print('\n=== 纯文本测试 ===')
+        print('\n=== Text-only test ===')
     
     text1 = '<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n<|im_start|>user\nWhat is 2+2?<|im_end|>\n<|im_start|>assistant\n'
     inputs1 = processor(text=[text1], return_tensors='pt', padding=True)
@@ -159,18 +159,18 @@ def test_zero3():
     
     if is_main:
         result1 = processor.batch_decode(outputs1, skip_special_tokens=True)[0]
-        print(f'结果: {result1[:300]}')
+        print(f'Result: {result1[:300]}')
         check_garbled(result1)
         print('\n' + '=' * 60)
 
 
 def check_garbled(text):
-    """检查是否有乱码"""
+    """Check for garbled output"""
     if 'system' * 3 in text.lower():
-        print('⚠️  检测到乱码!')
+        print('⚠️  Garbled output detected!')
         return True
     else:
-        print('✅ 输出正常')
+        print('✅ Output is normal')
         return False
 
 

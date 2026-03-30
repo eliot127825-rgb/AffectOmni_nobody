@@ -1,6 +1,6 @@
 """
-时间戳插入模块
-将匹配好的时间戳插入到原始 think 文本中
+Timestamp insertion module
+Insert matched timestamps into the original think text
 """
 
 import re
@@ -16,45 +16,45 @@ def insert_timestamps(
     format_style: str = "frame_and_time"
 ) -> str:
     """
-    将时间戳插入到原始 think 文本中
+    Insert timestamps into the original think text
     
     Args:
-        think_text: 原始 <think> 文本
-        events: 事件列表（包含 anchor 和 query）
-        frame_matches: {event.query: frame_id} 映射
-        timestamps: 每帧的时间戳列表
-        format_style: 时间戳格式
+        think_text: Original <think> text
+        events: List of events (containing anchor and query)
+        frame_matches: {event.query: frame_id} mapping
+        timestamps: List of timestamps per frame
+        format_style: Timestamp format
             - "frame_and_time": [Frame 3: 3.00s]
             - "frame_only": [Frame 3]
             - "time_only": [3.00s]
     
     Returns:
-        think_with_timestamps: 插入时间戳后的文本
+        think_with_timestamps: Text with timestamps inserted
     
-    策略：
-        1. 对每个事件，找到其 anchor 在原文中的位置
-        2. 在 anchor 后插入时间戳
-        3. 处理同一 anchor 多次出现的情况（使用"第一次未插入的位置"）
-        4. 如果 anchor 找不到，尝试降级策略
+    Strategy:
+        1. For each event, find the position of its anchor in the original text
+        2. Insert timestamp after the anchor
+        3. Handle cases where the same anchor appears multiple times (use "first un-inserted position")
+        4. If anchor is not found, try fallback strategies
     """
     result = think_text
-    inserted_positions = set()  # 记录已插入的位置，避免重复
+    inserted_positions = set()  # track inserted positions to avoid duplicates
     
     for event in events:
         anchor = event.anchor.strip()
         query = event.query
         
-        # 获取匹配的帧号
+        # Get matched frame number
         if query not in frame_matches:
             continue
         
         frame_id = frame_matches[query]
         timestamp = timestamps[frame_id] if frame_id < len(timestamps) else 0.0
         
-        # 生成时间戳字符串
+        # Generate timestamp string
         timestamp_str = _format_timestamp(frame_id, timestamp, format_style)
         
-        # 在原文中查找 anchor
+        # Find anchor in the original text
         success = _insert_at_anchor(
             result, anchor, timestamp_str, inserted_positions
         )
@@ -62,7 +62,7 @@ def insert_timestamps(
         if success:
             result = success
         else:
-            # Fallback: 尝试模糊匹配
+            # Fallback: try fuzzy matching
             result = _insert_with_fuzzy_match(
                 result, anchor, query, timestamp_str, inserted_positions
             )
@@ -75,7 +75,7 @@ def _format_timestamp(
     timestamp: float,
     format_style: str
 ) -> str:
-    """生成时间戳字符串"""
+    """Generate timestamp string"""
     if format_style == "frame_and_time":
         return f" [Frame {frame_id}: {timestamp:.2f}s]"
     elif format_style == "frame_only":
@@ -93,19 +93,19 @@ def _insert_at_anchor(
     inserted_positions: set
 ) -> str:
     """
-    在指定 anchor 位置插入时间戳
+    Insert timestamp at the specified anchor position
     
-    处理同一 anchor 多次出现的情况：
-        - 使用"第一次未插入的位置"
+    Handles cases where the same anchor appears multiple times:
+        - Uses "first un-inserted position"
     
     Returns:
-        插入后的文本，如果找不到 anchor 则返回 None
+        Text after insertion, or None if anchor is not found
     """
-    # 不区分大小写查找
+    # Case-insensitive search
     anchor_lower = anchor.lower()
     text_lower = text.lower()
     
-    # 查找所有匹配位置
+    # Find all matching positions
     positions = []
     start = 0
     while True:
@@ -118,18 +118,18 @@ def _insert_at_anchor(
     if not positions:
         return None
     
-    # 找到第一个未插入的位置
+    # Find the first un-inserted position
     for pos in positions:
         if pos not in inserted_positions:
-            # 插入时间戳（在 anchor 后）
+            # Insert timestamp (after anchor)
             insert_pos = pos + len(anchor)
             result = text[:insert_pos] + timestamp_str + text[insert_pos:]
             
-            # 标记已插入
+            # Mark as inserted
             inserted_positions.add(pos)
             return result
     
-    # 所有位置都已插入
+    # All positions already inserted
     return None
 
 
@@ -141,28 +141,28 @@ def _insert_with_fuzzy_match(
     inserted_positions: set
 ) -> str:
     """
-    降级策略：模糊匹配
+    Fallback strategy: fuzzy matching
     
-    如果 anchor 完全找不到，尝试：
-        1. 查找 query 中的关键词
-        2. 查找 anchor 的部分短语
-        3. 最后：直接追加到句末
+    If anchor cannot be found at all, try:
+        1. Search for keywords from the query
+        2. Search for partial phrases from the anchor
+        3. Last resort: append to end of text
     """
-    # 策略1: 查找 query 的关键词
+    # Strategy 1: search for query keywords
     query_words = query.split()
     for word in query_words:
-        if len(word) > 3:  # 跳过太短的词
+        if len(word) > 3:  # skip words that are too short
             match = re.search(r'\b' + re.escape(word) + r'\b', text, re.IGNORECASE)
             if match:
                 pos = match.start()
                 if pos not in inserted_positions:
-                    # 找到词的结尾
+                    # Find end of word
                     end_pos = match.end()
                     result = text[:end_pos] + timestamp_str + text[end_pos:]
                     inserted_positions.add(pos)
                     return result
     
-    # 策略2: 查找 anchor 的前半部分
+    # Strategy 2: search for the first half of anchor
     anchor_half = anchor[:len(anchor)//2]
     if len(anchor_half) > 10:
         pos = text.lower().find(anchor_half.lower())
@@ -172,8 +172,8 @@ def _insert_with_fuzzy_match(
             inserted_positions.add(pos)
             return result
     
-    # 策略3: 追加到文本末尾（带上下文）
-    # 这是最后的手段，尽量避免
+    # Strategy 3: append to end of text (with context)
+    # This is a last resort, try to avoid
     result = text + f"\n(Event: {query}{timestamp_str})"
     return result
 
@@ -186,19 +186,19 @@ def batch_insert_timestamps(
     format_style: str = "frame_and_time"
 ) -> str:
     """
-    批量插入时间戳（events 和 frame_matches 是对齐的列表）
+    Batch insert timestamps (events and frame_matches are aligned lists)
     
     Args:
-        think_text: 原始文本
-        events: 事件列表
-        frame_matches: 帧号列表（与 events 对齐）
-        timestamps: 时间戳列表
-        format_style: 格式样式
+        think_text: Original text
+        events: List of events
+        frame_matches: List of frame numbers (aligned with events)
+        timestamps: List of timestamps
+        format_style: Format style
     
     Returns:
-        插入时间戳后的文本
+        Text with timestamps inserted
     """
-    # 转换为字典格式
+    # Convert to dict format
     frame_dict = {
         event.query: frame_matches[i]
         for i, event in enumerate(events)
@@ -216,7 +216,7 @@ def verify_insertions(
     expected_count: int
 ) -> Dict[str, any]:
     """
-    验证时间戳插入的结果
+    Verify the results of timestamp insertion
     
     Returns:
         {
@@ -226,12 +226,12 @@ def verify_insertions(
             'missing': int
         }
     """
-    # 统计插入的时间戳数量
+    # Count inserted timestamps
     timestamp_pattern = r'\[Frame \d+: \d+\.\d+s\]'
     inserted = len(re.findall(timestamp_pattern, modified))
     
     return {
-        'success': inserted >= expected_count * 0.7,  # 70% 成功率即可
+        'success': inserted >= expected_count * 0.7,  # 70% success rate is acceptable
         'inserted_count': inserted,
         'expected_count': expected_count,
         'missing': max(0, expected_count - inserted),
@@ -239,7 +239,7 @@ def verify_insertions(
     }
 
 
-# 便捷函数
+# Convenience function
 def quick_insert(
     think_text: str,
     event_queries: List[str],
@@ -247,13 +247,13 @@ def quick_insert(
     timestamps: List[float]
 ) -> str:
     """
-    快速插入接口（当你已经有简单的 query 列表时）
+    Quick insert interface (when you already have a simple query list)
     
-    注意：这个函数假设 query 可以直接在文本中找到
+    Note: This function assumes queries can be found directly in the text
     """
     from extract_events import Event
     
-    # 构造简单的 Event 对象（anchor = query）
+    # Construct simple Event objects (anchor = query)
     events = [Event(anchor=q, query=q) for q in event_queries]
     
     frame_dict = {q: fid for q, fid in zip(event_queries, frame_ids)}

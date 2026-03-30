@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# 使用GPU 4和5评估WorldSense数据集
+# Evaluate WorldSense dataset using GPU 4 and 5
 export PYTHONPATH=./
 export CUDA_VISIBLE_DEVICES=4,5
 

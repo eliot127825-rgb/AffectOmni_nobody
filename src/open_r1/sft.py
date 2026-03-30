@@ -389,16 +389,16 @@ def collate_fn(examples):
         use_audio_in_video=False
     )
     
-    # 硬核实测断言：检查实际序列长度
+    # Assertion: check actual sequence lengths
     input_ids = batch["input_ids"]
     seq_lens = (input_ids != processor.tokenizer.pad_token_id).sum(dim=1)
     max_len = int(seq_lens.max().item())
     
     logger.info(f"[SEQUENCE CHECK] Batch size={len(examples)}, Max seq len={max_len}, Min seq len={int(seq_lens.min().item())}")
     
-    # 强约束：一旦超过就直接报错定位样本
+    # Hard constraint: raise error immediately if exceeded, to locate offending samples
     if max_len > 32768:
-        # 找出超长样本的索引
+        # Find the indices of samples that exceed the length limit
         for idx, seq_len in enumerate(seq_lens):
             if seq_len > 32768:
                 logger.error(f"[SEQUENCE TOO LONG] Sample {idx}: seq_len={int(seq_len.item())}")
@@ -485,9 +485,9 @@ def main(script_args, training_args, model_args):
     elif hasattr(processor.tokenizer, "pad_token") and processor.tokenizer.pad_token is None:
         processor.tokenizer.pad_token = processor.tokenizer.eos_token
     
-    # 强制覆盖 image_processor 的 max_pixels 和 min_pixels
+    # Override image_processor max_pixels and min_pixels
     if hasattr(processor, 'image_processor'):
-        processor.image_processor.max_pixels = 6422528  # 6.4M pixels (减半)
+        processor.image_processor.max_pixels = 6422528  # 6.4M pixels (halved)
         processor.image_processor.min_pixels = 3136
         logger.info(f"Overriding image_processor: max_pixels={processor.image_processor.max_pixels}, min_pixels={processor.image_processor.min_pixels}")
     

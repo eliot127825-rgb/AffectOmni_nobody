@@ -192,7 +192,7 @@ class MyDataset(Dataset):
                         for each in cur_data_dict:
                             if "path" in each:
                                 each["path"] = os.path.join(data["data_root"], each["path"])
-                            # 同时处理video字段，避免优先使用video时路径错误
+                            # Also handle 'video' field to avoid path errors when 'video' key is preferred
                             if "video" in each and not os.path.isabs(each["video"]):
                                 each["video"] = os.path.join(data["data_root"], each["video"])
                     print(f"Loaded {len(cur_data_dict)} samples from {json_path}")
@@ -341,7 +341,7 @@ class InferenceSampler(torch.utils.data.sampler.Sampler):
 
 
 def save_checkpoint(rank, retained_samples, processed_indices, checkpoint_dir="checkpoints"):
-    """保存checkpoint到磁盘"""
+    """Save checkpoint to disk"""
     os.makedirs(checkpoint_dir, exist_ok=True)
     checkpoint_path = os.path.join(checkpoint_dir, f"rank_{rank}_checkpoint.pkl")
     checkpoint_data = {
@@ -349,27 +349,27 @@ def save_checkpoint(rank, retained_samples, processed_indices, checkpoint_dir="c
         'processed_indices': processed_indices,
         'rank': rank
     }
-    # 先保存到临时文件，再重命名（原子操作，避免保存过程中崩溃导致文件损坏）
+    # Write to temp file first, then rename (atomic operation to prevent corruption on crash)
     temp_path = checkpoint_path + ".tmp"
     with open(temp_path, 'wb') as f:
         pickle.dump(checkpoint_data, f)
     os.rename(temp_path, checkpoint_path)
-    print(f"[Rank {rank}] ✅ Checkpoint已保存: {len(processed_indices)}个batch已处理")
+    print(f"[Rank {rank}] Checkpoint saved: {len(processed_indices)} batches processed")
 
 def load_checkpoint(rank, checkpoint_dir="checkpoints"):
-    """从磁盘加载checkpoint"""
+    """Load checkpoint from disk"""
     checkpoint_path = os.path.join(checkpoint_dir, f"rank_{rank}_checkpoint.pkl")
     if os.path.exists(checkpoint_path):
         try:
             with open(checkpoint_path, 'rb') as f:
                 checkpoint_data = pickle.load(f)
-            print(f"[Rank {rank}] 🔄 从checkpoint恢复: {len(checkpoint_data['processed_indices'])}个batch已完成")
+            print(f"[Rank {rank}] Resumed from checkpoint: {len(checkpoint_data['processed_indices'])} batches completed")
             return checkpoint_data['retained_samples'], checkpoint_data['processed_indices']
         except Exception as e:
-            print(f"[Rank {rank}] ⚠️  Checkpoint加载失败: {e}，从头开始")
+            print(f"[Rank {rank}] Checkpoint loading failed: {e}, starting from scratch")
             return [], set()
     else:
-        print(f"[Rank {rank}] 📝 未找到checkpoint，从头开始")
+        print(f"[Rank {rank}] No checkpoint found, starting from scratch")
         return [], set()
 
 def main(args):
@@ -386,21 +386,21 @@ def main(args):
 
 
 
-    # 加载模型权重
+    # Load model weights
     model = Qwen2_5OmniThinkerForConditionalGeneration.from_pretrained(args.model_path, torch_dtype=torch.bfloat16, device_map="cuda",attn_implementation="flash_attention_2",)
     
-    # Processor从基座模型加载（因为训练时只保存了模型权重）
-    BASE_MODEL_PATH = "${PROJECT_ROOT}/Qwen2.5-Omni-7B-Thinker"
+    # Load processor from base model (only model weights are saved during training)
+    BASE_MODEL_PATH = os.environ.get("BASE_MODEL_PATH", "./Qwen2.5-Omni-7B-Thinker")
     processor = Qwen2_5OmniProcessor.from_pretrained(BASE_MODEL_PATH)
 
    
     model_name = args.model_path.split("/")[-1]
       
-    # 使用指定的YAML配置文件来生成rollout数据（避免循环依赖）
+    # Use the specified YAML config file for rollout data generation
     data_config = getattr(args, 'data_config', 'data_config/rollout_gen.yaml')
     dataset = MyDataset(data_config, processor)
-    print(f"📂 使用数据配置: {data_config}")
-    print(f"📊 数据集大小: {len(dataset)} 个样本")
+    print(f"Using data config: {data_config}")
+    print(f"Dataset size: {len(dataset)} samples")
 
     dataloader = torch.utils.data.DataLoader(
         dataset=dataset,
@@ -412,16 +412,16 @@ def main(args):
         collate_fn=collate_fn,
     )
 
-    # 加载checkpoint（如果存在）
+    # Load checkpoint if it exists
     rank = torch.distributed.get_rank()
     retained_correct_samples, processed_indices = load_checkpoint(rank)
     
-    # Checkpoint配置
-    CHECKPOINT_INTERVAL = 20  # 每20个batch保存一次checkpoint（约40分钟）
-    batch_counter = len(processed_indices)  # 已处理的batch数量
+    # Checkpoint configuration
+    CHECKPOINT_INTERVAL = 20  # Save checkpoint every 20 batches
+    batch_counter = len(processed_indices)  # Number of batches already processed
     
     for batch_idx, inputs in enumerate(tqdm(dataloader, desc=f"{rank} Processing batches", initial=batch_counter, total=len(dataloader))):
-        # 跳过已处理的batch
+        # Skip already processed batches
         if batch_idx in processed_indices:
             continue
 
@@ -451,8 +451,8 @@ def main(args):
         NUM_SAMPLES_PER_INSTANCE = 8
         text_ids = []
         with torch.inference_mode():
-            # 保持1024 tokens完整输出（Stage 2训练需要完整数据）
-            # 每次只生成1个sequence，减少显存峰值占用，避免OOM
+            # Keep full 1024-token output for training data
+            # Generate 1 sequence at a time to reduce peak VRAM usage and avoid OOM
             for j in range(NUM_SAMPLES_PER_INSTANCE):
                 text_ids.extend(model.generate(**model_inputs, use_audio_in_video=False, max_new_tokens=1024, num_return_sequences=1,
                 do_sample=True, 
@@ -499,63 +499,63 @@ def main(args):
                     if reward>0.2:
                         correct_predictions_count += 1
                 
-                # 循环结束后计算准确率
+                # Compute accuracy after loop
                 sample_accuracy = correct_predictions_count / NUM_SAMPLES_PER_INSTANCE
 
-                # 打印样本评估结果
-                print(f"[Rank {torch.distributed.get_rank()}] 样本评估: 正确数={correct_predictions_count}/{NUM_SAMPLES_PER_INSTANCE}, 准确率={sample_accuracy:.2f}")
+                # Print sample evaluation results
+                print(f"[Rank {torch.distributed.get_rank()}] Sample eval: correct={correct_predictions_count}/{NUM_SAMPLES_PER_INSTANCE}, accuracy={sample_accuracy:.2f}")
                 
                 if 0 < sample_accuracy < 0.75 and correct_predictions_count > 0:
-                    print(f"[Rank {torch.distributed.get_rank()}] ✅ 保留样本（准确率在0-75%之间）")
+                    print(f"[Rank {torch.distributed.get_rank()}] Retained sample (accuracy between 0-75%)")
                     retained_correct_samples.append(inputs[i]["raw_data"])
                 else:
                     if sample_accuracy == 0:
-                        print(f"[Rank {torch.distributed.get_rank()}] ❌ 过滤：全部错误（准确率0%）")
+                        print(f"[Rank {torch.distributed.get_rank()}] Filtered: all incorrect (0% accuracy)")
                     elif sample_accuracy >= 0.75:
-                        print(f"[Rank {rank}] ❌ 过滤：太简单（准确率{sample_accuracy*100:.0f}%）")
+                        print(f"[Rank {rank}] Filtered: too easy ({sample_accuracy*100:.0f}% accuracy)")
                     print(inputs[i]["raw_data"])
         
-        # 记录已处理的batch
+        # Record processed batch
         processed_indices.add(batch_idx)
         batch_counter += 1
         
-        # 定期保存checkpoint
+        # Periodically save checkpoint
         if batch_counter % CHECKPOINT_INTERVAL == 0:
             save_checkpoint(rank, retained_correct_samples, processed_indices)
 
         
 
-    # 最后保存一次checkpoint
+    # Final checkpoint save
     save_checkpoint(rank, retained_correct_samples, processed_indices)
     
-    # 移除barrier：各GPU速度不均导致快的GPU等待慢的GPU超时
-    # all_gather_object内部已有隐式同步，不需要额外barrier
+    # Removed barrier: uneven GPU speeds cause fast GPUs to timeout waiting for slow ones.
+    # all_gather_object has implicit synchronization, no extra barrier needed.
     world_size = torch.distributed.get_world_size()
-    print(f"[Rank {rank}] World size: {world_size}, 本地样本数: {len(retained_correct_samples)}")
+    print(f"[Rank {rank}] World size: {world_size}, local samples: {len(retained_correct_samples)}")
    
     merged_sources = [None for _ in range(world_size)]
 
-    print(f"[Rank {rank}] 开始all_gather（内含同步）...")
+    print(f"[Rank {rank}] Starting all_gather (includes sync)...")
     torch.distributed.all_gather_object(merged_sources, retained_correct_samples)
-    print(f"[Rank {rank}] all_gather完成！")
+    print(f"[Rank {rank}] all_gather complete!")
 
 
     merged_sources = [_ for _ in itertools.chain.from_iterable(merged_sources)]
 
 
     if rank == 0:
-        print(f"[Rank 0] 合并后总样本数: {len(merged_sources)}")
-        print(f"[Rank 0] 保存到: data_config/{model_name}_r8.json")
+        print(f"[Rank 0] Total samples after merge: {len(merged_sources)}")
+        print(f"[Rank 0] Saving to: data_config/{model_name}_r8.json")
         with open(f"data_config/{model_name}_r8.json", "w", encoding="utf-8") as f:
             json.dump(merged_sources, f, indent=2, ensure_ascii=False)
-        print(f"[Rank 0] ✅ 文件保存成功！")
+        print(f"[Rank 0] File saved successfully!")
         
-        # 清理所有checkpoint文件
-        print(f"[Rank 0] 🧹 清理checkpoint文件...")
+        # Clean up all checkpoint files
+        print(f"[Rank 0] Cleaning up checkpoint files...")
         import shutil
         if os.path.exists("checkpoints"):
             shutil.rmtree("checkpoints")
-            print(f"[Rank 0] ✅ Checkpoint已清理")
+            print(f"[Rank 0] Checkpoints cleaned up")
             
 
 if __name__ == "__main__":

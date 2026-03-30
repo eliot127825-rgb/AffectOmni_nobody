@@ -1,13 +1,13 @@
 #!/usr/bin/env python
 """
-测试 DeepSpeed Zero3 + Qwen2.5-Omni 多模态生成（模拟 GRPO trainer 环境）
+Test DeepSpeed Zero3 + multimodal generation (simulating GRPO trainer environment)
 
-这个脚本模拟 GRPO trainer 的环境：
-1. 使用 DeepSpeed Zero3 初始化
-2. 创建 optimizer（模拟训练流程）
-3. 测试 remove_hooks/add_hooks 后的生成
+This script simulates the GRPO trainer environment:
+1. Initialize with DeepSpeed Zero3
+2. Create optimizer (simulating training flow)
+3. Test generation after remove_hooks/add_hooks
 
-运行方式:
+Usage:
   CUDA_VISIBLE_DEVICES=0,1 deepspeed --num_gpus 2 scripts/test_zero3_multimodal_with_hooks.py
 """
 import argparse
@@ -31,7 +31,7 @@ def remove_hooks(model):
         return [param for _, param in get_all_parameters(module, recurse)]
     
     if not hasattr(model, "optimizer"):
-        print("  [remove_hooks] 模型没有 optimizer，跳过")
+        print("  [remove_hooks] Model has no optimizer, skipping")
         return
     if model.optimizer is not None and hasattr(model.optimizer, "parameter_offload"):
         optimizer_offload = model.optimizer.parameter_offload
@@ -50,7 +50,7 @@ def remove_hooks(model):
 
     optimizer_offload.forward_hooks = []
     optimizer_offload.backward_hooks = []
-    print("  [remove_hooks] hooks 已移除")
+    print("  [remove_hooks] Hooks removed")
 
 
 def add_hooks(model):
@@ -58,7 +58,7 @@ def add_hooks(model):
     from packaging import version
     
     if not hasattr(model, "optimizer"):
-        print("  [add_hooks] 模型没有 optimizer，跳过")
+        print("  [add_hooks] Model has no optimizer, skipping")
         return
     if model.optimizer is not None and hasattr(model.optimizer, "parameter_offload"):
         optimizer_offload = model.optimizer.parameter_offload
@@ -71,16 +71,16 @@ def add_hooks(model):
         optimizer_offload._register_deepspeed_module(optimizer_offload.module)
     else:
         optimizer_offload._register_hooks_recursively(optimizer_offload.module)
-    print("  [add_hooks] hooks 已恢复")
+    print("  [add_hooks] Hooks restored")
 
 
 def check_garbled(text):
-    """检查是否有乱码"""
+    """Check for garbled output"""
     if 'system' * 3 in text.lower():
-        print('⚠️  检测到乱码!')
+        print('⚠️  Garbled output detected!')
         return True
     else:
-        print('✅ 输出正常')
+        print('✅ Output is normal')
         return False
 
 
@@ -99,7 +99,7 @@ def main():
             "stage3_max_reuse_distance": 1e9,
             "gather_16bit_weights_on_model_save": True,
         },
-        "train_batch_size": world_size,  # 动态计算
+        "train_batch_size": world_size,  # dynamically computed
         "train_micro_batch_size_per_gpu": 1,
         "gradient_accumulation_steps": 1,
     }
@@ -109,7 +109,7 @@ def main():
     
     if is_main:
         print('=' * 70)
-        print('测试 DeepSpeed Zero3 + 多模态 (模拟 GRPO trainer 环境)')
+        print('Test DeepSpeed Zero3 + multimodal (simulating GRPO trainer environment)')
         print('=' * 70)
     
     deepspeed.init_distributed()
@@ -118,7 +118,7 @@ def main():
     test_video = "${PROJECT_ROOT}/data/videos/MER24/sample_00000033.mp4"
     
     if is_main:
-        print('\n[1] 加载模型...')
+        print('\n[1] Loading model...')
     
     model = Qwen2_5OmniThinkerForConditionalGeneration.from_pretrained(
         model_path,
@@ -127,25 +127,25 @@ def main():
     )
     processor = Qwen2_5OmniProcessor.from_pretrained(model_path, trust_remote_code=True)
     
-    # 模拟 trainer 设置
+    # Simulate trainer setup
     model.gradient_checkpointing_enable()
     model.config.use_cache = False
     
     if is_main:
-        print('\n[2] 初始化 DeepSpeed...')
+        print('\n[2] Initializing DeepSpeed...')
     
-    # 创建 optimizer 来模拟训练环境
+    # Create optimizer to simulate training environment
     model_engine, optimizer, _, _ = deepspeed.initialize(
         model=model, 
         config=ds_config,
-        model_parameters=model.parameters(),  # 添加这个来创建 optimizer
+        model_parameters=model.parameters(),  # needed to create optimizer
     )
     
     if is_main:
-        print(f'  DeepSpeed 版本: {deepspeed.__version__}')
-        print(f'  模型是否有 optimizer: {hasattr(model_engine, "optimizer")}')
+        print(f'  DeepSpeed version: {deepspeed.__version__}')
+        print(f'  Model has optimizer: {hasattr(model_engine, "optimizer")}')
         if hasattr(model_engine, "optimizer"):
-            print(f'  Optimizer 类型: {type(model_engine.optimizer)}')
+            print(f'  Optimizer type: {type(model_engine.optimizer)}')
     
     gen_config = GenerationConfig(
         max_new_tokens=100,
@@ -157,11 +157,11 @@ def main():
     )
     
     # =====================================================
-    # 测试 1: 纯文本，无 hooks 操作
+    # Test 1: Text-only, no hooks operation
     # =====================================================
     if is_main:
         print('\n' + '=' * 70)
-        print('测试 1: 纯文本生成 (无 hooks 操作)')
+        print('Test 1: Text-only generation (no hooks operation)')
         print('=' * 70)
     
     text1 = '<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n<|im_start|>user\nWhat is 2+2?<|im_end|>\n<|im_start|>assistant\n'
@@ -175,15 +175,15 @@ def main():
     
     if is_main:
         result1 = processor.batch_decode(outputs1, skip_special_tokens=True)[0]
-        print(f'结果: {result1[:300]}')
+        print(f'Result: {result1[:300]}')
         check_garbled(result1)
     
     # =====================================================
-    # 测试 2: 纯文本，带 hooks 操作（模拟 TRL 的 unwrap_model_for_generation）
+    # Test 2: Text-only, with hooks operation (simulating TRL's unwrap_model_for_generation)
     # =====================================================
     if is_main:
         print('\n' + '=' * 70)
-        print('测试 2: 纯文本生成 (带 remove_hooks/add_hooks)')
+        print('Test 2: Text-only generation (with remove_hooks/add_hooks)')
         print('=' * 70)
     
     inputs2 = processor(text=[text1], return_tensors='pt', padding=True)
@@ -198,18 +198,18 @@ def main():
     
     if is_main:
         result2 = processor.batch_decode(outputs2, skip_special_tokens=True)[0]
-        print(f'结果: {result2[:300]}')
+        print(f'Result: {result2[:300]}')
         check_garbled(result2)
     
     # =====================================================
-    # 测试 3: 多模态（视频），无 hooks 操作
+    # Test 3: Multimodal (video), no hooks operation
     # =====================================================
     if is_main:
         print('\n' + '=' * 70)
-        print('测试 3: 多模态生成 (视频, 无 hooks 操作)')
+        print('Test 3: Multimodal generation (video, no hooks operation)')
         print('=' * 70)
     
-    # 注意: 多模态输入需要同步到所有 rank
+    # Note: multimodal inputs need to be synced to all ranks
     text3 = '<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n<|im_start|>user\n<|vision_bos|><|VIDEO|><|vision_eos|>\nDescribe what you see in the video.<|im_end|>\n<|im_start|>assistant\n'
     
     try:
@@ -236,21 +236,21 @@ def main():
         
         if is_main:
             result3 = processor.batch_decode(outputs3, skip_special_tokens=True)[0]
-            print(f'结果: {result3[:500]}')
+            print(f'Result: {result3[:500]}')
             check_garbled(result3)
             
     except Exception as e:
         if is_main:
-            print(f'❌ 多模态测试失败: {e}')
+            print(f'❌ Multimodal test failed: {e}')
             import traceback
             traceback.print_exc()
     
     # =====================================================
-    # 测试 4: 多模态（视频），带 hooks 操作
+    # Test 4: Multimodal (video), with hooks operation
     # =====================================================
     if is_main:
         print('\n' + '=' * 70)
-        print('测试 4: 多模态生成 (视频, 带 remove_hooks/add_hooks)')
+        print('Test 4: Multimodal generation (video, with remove_hooks/add_hooks)')
         print('=' * 70)
     
     try:
@@ -273,21 +273,21 @@ def main():
         
         if is_main:
             result4 = processor.batch_decode(outputs4, skip_special_tokens=True)[0]
-            print(f'结果: {result4[:500]}')
+            print(f'Result: {result4[:500]}')
             check_garbled(result4)
             
     except Exception as e:
         if is_main:
-            print(f'❌ 多模态测试 (带 hooks) 失败: {e}')
+            print(f'❌ Multimodal test (with hooks) failed: {e}')
             import traceback
             traceback.print_exc()
     
     # =====================================================
-    # 测试 5: 使用 qwen_omni_utils.process_mm_info（模拟 trainer 的数据处理）
+    # Test 5: Using qwen_omni_utils.process_mm_info (simulating trainer data processing)
     # =====================================================
     if is_main:
         print('\n' + '=' * 70)
-        print('测试 5: 使用 qwen_omni_utils.process_mm_info 处理数据')
+        print('Test 5: Processing data with qwen_omni_utils.process_mm_info')
         print('=' * 70)
     
     try:
@@ -307,10 +307,10 @@ def main():
             print(f'  audios: {type(audios)}, count: {len(audios) if audios else 0}')
             print(f'  videos: {type(videos)}, count: {len(videos) if videos else 0}')
         
-        # 应用 chat template
+        # Apply chat template
         text5 = processor.apply_chat_template(conversation, tokenize=False, add_generation_prompt=True)
         
-        # 使用预处理的 audio/video
+        # Use preprocessed audio/video
         inputs5 = processor(
             text=[text5], 
             videos=videos,
@@ -336,18 +336,18 @@ def main():
         
         if is_main:
             result5 = processor.batch_decode(outputs5, skip_special_tokens=True)[0]
-            print(f'结果: {result5[:500]}')
+            print(f'Result: {result5[:500]}')
             check_garbled(result5)
             
     except Exception as e:
         if is_main:
-            print(f'❌ process_mm_info 测试失败: {e}')
+            print(f'❌ process_mm_info test failed: {e}')
             import traceback
             traceback.print_exc()
     
     if is_main:
         print('\n' + '=' * 70)
-        print('所有测试完成!')
+        print('All tests completed!')
         print('=' * 70)
 
 

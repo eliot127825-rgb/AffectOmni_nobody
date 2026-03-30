@@ -1,29 +1,29 @@
 #!/bin/bash
-# 评估模型：Daily-Omni, IntentBench, WorldSense
+# Evaluate model: Daily-Omni, IntentBench, WorldSense
 
 echo "=========================================="
-echo "批量评估脚本 - Daily-Omni & IntentBench & WorldSense"
+echo "Batch evaluation script - Daily-Omni & IntentBench & WorldSense"
 echo "=========================================="
 
-# 设置环境变量
+# Set environment variables
 export PYTHONPATH=./
 export CUDA_VISIBLE_DEVICES=4,5,6,7
 
-# 配置参数
-NPROC_PER_NODE=4  # 使用4个GPU
+# Configuration parameters
+NPROC_PER_NODE=4  # use 4 GPUs
 MASTER_PORT=29502
 
-# 模型路径（根据需要修改）
+# Model path (modify as needed)
 MODEL_PATH=${1:-"${OUTPUT_DIR}/stage4_improved_v1/checkpoint-518"}
 FILE_PREFIX=${2:-"stage4_improved_v1"}
 
-echo "模型路径: $MODEL_PATH"
-echo "结果文件前缀: $FILE_PREFIX"
+echo "Model path: $MODEL_PATH"
+echo "Result file prefix: $FILE_PREFIX"
 echo "=========================================="
 
-# # 评估 Daily-Omni (已注释)
+# # Evaluate Daily-Omni (commented out)
 # echo ""
-# echo ">>> 开始评估 Daily-Omni 数据集..."
+# echo ">>> Evaluating Daily-Omni dataset..."
 # python -m torch.distributed.launch \
 #     --use_env \
 #     --nproc_per_node $NPROC_PER_NODE \
@@ -35,12 +35,12 @@ echo "=========================================="
 #     --dataset daily
 
 # echo ""
-# echo "Daily-Omni 评估完成！结果: eval_results/${FILE_PREFIX}/daily_${FILE_PREFIX}.json"
+# echo "Daily-Omni evaluation complete! Results: eval_results/${FILE_PREFIX}/daily_${FILE_PREFIX}.json"
 # echo "=========================================="
 
-# # 评估 IntentBench (已注释)
+# # Evaluate IntentBench (commented out)
 # echo ""
-# echo ">>> 开始评估 IntentBench 数据集..."
+# echo ">>> Evaluating IntentBench dataset..."
 # python -m torch.distributed.launch \
 #     --use_env \
 #     --nproc_per_node $NPROC_PER_NODE \
@@ -52,12 +52,12 @@ echo "=========================================="
 #     --dataset ib
 
 # echo ""
-# echo "IntentBench 评估完成！结果: eval_results/${FILE_PREFIX}/ib_${FILE_PREFIX}.json"
+# echo "IntentBench evaluation complete! Results: eval_results/${FILE_PREFIX}/ib_${FILE_PREFIX}.json"
 # echo "=========================================="
 
-# 评估 WorldSense
+# Evaluate WorldSense
 echo ""
-echo ">>> 开始评估 WorldSense 数据集..."
+echo ">>> Evaluating WorldSense dataset..."
 python -m torch.distributed.launch \
     --use_env \
     --nproc_per_node $NPROC_PER_NODE \
@@ -69,13 +69,13 @@ python -m torch.distributed.launch \
     --dataset world
 
 echo ""
-echo "WorldSense 评估完成！结果: eval_results/${FILE_PREFIX}/world_${FILE_PREFIX}.json"
+echo "WorldSense evaluation complete! Results: eval_results/${FILE_PREFIX}/world_${FILE_PREFIX}.json"
 echo "=========================================="
 
 echo ""
-echo "🎉 所有评估完成！"
+echo "All evaluations complete!"
 echo ""
-echo "结果文件:"
+echo "Result files:"
 echo "  - Daily-Omni:  eval_results/${FILE_PREFIX}/daily_${FILE_PREFIX}.json"
 echo "  - IntentBench: eval_results/${FILE_PREFIX}/ib_${FILE_PREFIX}.json"
 echo "  - WorldSense:  eval_results/${FILE_PREFIX}/world_${FILE_PREFIX}.json"

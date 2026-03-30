@@ -1,6 +1,6 @@
 """
-事件抽取模块
-从模型的 <think> 输出中提取关键事件
+Event extraction module
+Extract key events from the model's <think> output
 """
 
 import re
@@ -10,12 +10,12 @@ import warnings
 
 
 class Event:
-    """事件数据结构"""
+    """Event data structure"""
     def __init__(self, anchor: str, query: str):
         """
         Args:
-            anchor: 用于在原文中定位的锚点（尽量是原句/片段）
-            query: 用于 CLIP 匹配的查询短语（更短更"图像化"）
+            anchor: Anchor text for locating in the original text (preferably original sentence/fragment)
+            query: Query phrase for CLIP matching (shorter and more "visual")
         """
         self.anchor = anchor
         self.query = query
@@ -34,20 +34,20 @@ def extract_events_with_llm(
     max_events: int = 10
 ) -> List[Event]:
     """
-    使用 LLM 从 think 中提取事件（推荐路线）
+    Use LLM to extract events from think text (recommended approach)
     
     Args:
-        think_text: 原始 <think> 文本
-        model: 语言模型（HumanOmniV2 或其他）
-        processor: 模型的 processor
-        max_events: 最多提取的事件数
+        think_text: Original <think> text
+        model: Language model
+        processor: Model processor
+        max_events: Maximum number of events to extract
     
     Returns:
-        events: Event 对象列表
+        events: List of Event objects
     
-    策略：
-        让模型输出"事件要点列表"，而不是时间戳
-        这不改变模型的写作范式，成功率高
+    Strategy:
+        Have the model output a "list of event key points" instead of timestamps.
+        This does not change the model's writing paradigm, yielding a high success rate.
     """
     prompt = f"""Based on the following reasoning text, extract key visual events as short phrases.
 
@@ -69,7 +69,7 @@ Requirements:
 
 JSON output:"""
 
-    # 构造消息
+    # Construct messages
     messages = [
         {
             "role": "system",
@@ -81,7 +81,7 @@ JSON output:"""
         }
     ]
     
-    # 应用 chat template
+    # Apply chat template
     try:
         texts = processor.apply_chat_template(
             [messages],
@@ -90,14 +90,14 @@ JSON output:"""
         )
         text = texts[0]
         
-        # 处理输入
+        # Process inputs
         inputs = processor(
             text=[text],
             return_tensors="pt",
             padding=True
         ).to(model.device)
         
-        # 生成
+        # Generate
         import torch
         with torch.no_grad():
             outputs = model.generate(
@@ -107,13 +107,13 @@ JSON output:"""
                 do_sample=False
             )
         
-        # 解码
+        # Decode
         generated_text = processor.batch_decode(
             outputs[:, inputs['input_ids'].shape[1]:],
             skip_special_tokens=True
         )[0]
         
-        # 解析 JSON
+        # Parse JSON
         events = _parse_events_json(generated_text)
         return events[:max_events]
         
@@ -127,20 +127,20 @@ def extract_events_rule_based(
     max_events: int = 10
 ) -> List[Event]:
     """
-    基于规则的事件提取（Fallback）
+    Rule-based event extraction (Fallback)
     
-    策略：
-        1. 句子切分
-        2. 关键词过滤（动作词、视觉词）
-        3. 提取短语
+    Strategy:
+        1. Sentence splitting
+        2. Keyword filtering (action words, visual words)
+        3. Phrase extraction
     """
-    # 清理文本
+    # Clean text
     text = think_text.strip()
     
-    # 句子切分（简单版）
+    # Sentence splitting (simple version)
     sentences = re.split(r'[.!?]\s+', text)
     
-    # 视觉动作关键词（更具体）
+    # Visual action keywords (more specific)
     visual_action_keywords = [
         'pick', 'hold', 'give', 'receive', 'grab', 'touch', 'point',
         'smile', 'frown', 'laugh', 'cry', 'nod', 'shake', 'turn',
@@ -150,7 +150,7 @@ def extract_events_rule_based(
         'kiss', 'hug', 'push', 'pull', 'throw', 'catch'
     ]
     
-    # 视觉对象关键词
+    # Visual object keywords
     visual_object_keywords = [
         'woman', 'man', 'person', 'people', 'child', 'baby',
         'hair', 'face', 'eyes', 'eyebrows', 'hand', 'arm', 'leg',
@@ -159,7 +159,7 @@ def extract_events_rule_based(
         'table', 'chair', 'door', 'window', 'car', 'room'
     ]
     
-    # 需要过滤的推理性词汇（扩展）
+    # Reasoning words to filter out (extended)
     reasoning_keywords = [
         'think', 'consider', 'seem', 'suggest', 'indicate', 'imply',
         'therefore', 'so', 'thus', 'hence', 'because', 'since',
@@ -173,20 +173,20 @@ def extract_events_rule_based(
     events = []
     for sentence in sentences:
         sentence = sentence.strip()
-        if not sentence or len(sentence) < 20:  # 更高的最小长度
+        if not sentence or len(sentence) < 20:  # higher minimum length
             continue
         
         sentence_lower = sentence.lower()
         
-        # 过滤掉推理性句子（更严格）
+        # Filter out reasoning sentences (stricter)
         if any(kw in sentence_lower for kw in reasoning_keywords):
             continue
         
-        # 必须同时包含动作词和对象词（更严格）
+        # Must contain both action and object words (stricter)
         has_action = any(kw in sentence_lower for kw in visual_action_keywords)
         has_object = any(kw in sentence_lower for kw in visual_object_keywords)
         
-        # 只有同时包含动作和对象的句子才保留
+        # Only keep sentences containing both action and object
         if has_action and has_object:
             anchor = sentence
             query = _simplify_to_query(sentence)
@@ -195,7 +195,7 @@ def extract_events_rule_based(
             if len(events) >= max_events:
                 break
     
-    # 如果提取的事件太少，降低标准（至少要有动作或对象）
+    # If too few events extracted, lower the threshold (at least action or object)
     if len(events) < 3:
         events = []
         for sentence in sentences:
@@ -205,7 +205,7 @@ def extract_events_rule_based(
             
             sentence_lower = sentence.lower()
             
-            # 仍然过滤推理性句子
+            # Still filter out reasoning sentences
             if any(kw in sentence_lower for kw in reasoning_keywords):
                 continue
             
@@ -225,44 +225,44 @@ def extract_events_rule_based(
 
 def _simplify_to_query(sentence: str) -> str:
     """
-    将句子简化为适合 CLIP 的查询短语
+    Simplify a sentence into a CLIP-friendly query phrase
     
-    策略：
-        - 去掉副词、连接词
-        - 保留主要的名词和动词
-        - 限制长度
+    Strategy:
+        - Remove adverbs, conjunctions
+        - Keep main nouns and verbs
+        - Limit length
     """
-    # 简单版本：保留前8个词
+    # Simple version: keep first 8 words
     words = sentence.split()[:8]
     
-    # 去掉一些停用词
+    # Remove some stop words
     stop_words = {'the', 'a', 'an', 'is', 'are', 'was', 'were', 'that', 'this', 'it'}
     filtered = [w for w in words if w.lower() not in stop_words]
     
-    return ' '.join(filtered[:6])  # 限制6个词
+    return ' '.join(filtered[:6])  # limit to 6 words
 
 
 def _parse_events_json(text: str) -> List[Event]:
     """
-    从生成的文本中解析 JSON 格式的事件
+    Parse JSON-formatted events from generated text
     
-    支持的格式：
+    Supported formats:
         {"events": [...]}
-        或者直接是数组 [...]
+        or a direct array [...]
     """
-    # 提取 JSON 部分（可能在 markdown 代码块中）
+    # Extract JSON part (may be inside markdown code blocks)
     json_match = re.search(r'```json\s*(\{.*?\})\s*```', text, re.DOTALL)
     if json_match:
         json_str = json_match.group(1)
     else:
-        # 尝试直接提取 JSON 对象
+        # Try to extract JSON object directly
         json_match = re.search(r'\{.*"events".*\}', text, re.DOTALL)
         if json_match:
             json_str = json_match.group(0)
         else:
             raise ValueError("No valid JSON found in generated text")
     
-    # 解析 JSON
+    # Parse JSON
     data = json.loads(json_str)
     
     if isinstance(data, dict) and 'events' in data:
@@ -272,7 +272,7 @@ def _parse_events_json(text: str) -> List[Event]:
     else:
         raise ValueError("Invalid JSON structure")
     
-    # 转换为 Event 对象
+    # Convert to Event objects
     events = []
     for item in events_data:
         if isinstance(item, dict) and 'anchor' in item and 'query' in item:
@@ -291,16 +291,16 @@ def extract_events(
     max_events: int = 10
 ) -> List[Event]:
     """
-    统一的事件提取接口
+    Unified event extraction interface
     
     Args:
-        think_text: <think> 文本
-        method: "llm" 或 "rule"
-        model, processor: LLM 方法需要
-        max_events: 最多提取的事件数
+        think_text: <think> text
+        method: "llm" or "rule"
+        model, processor: Required for LLM method
+        max_events: Maximum number of events to extract
     
     Returns:
-        events: Event 对象列表
+        events: List of Event objects
     """
     if method == "llm":
         if model is None or processor is None:
@@ -313,12 +313,12 @@ def extract_events(
         raise ValueError(f"Unknown method: {method}")
 
 
-# 便捷函数
+# Convenience functions
 def events_to_queries(events: List[Event]) -> List[str]:
-    """提取所有 query 字符串"""
+    """Extract all query strings"""
     return [e.query for e in events]
 
 
 def events_to_dict_list(events: List[Event]) -> List[Dict]:
-    """转换为字典列表（用于保存/调试）"""
+    """Convert to list of dicts (for saving/debugging)"""
     return [e.to_dict() for e in events]

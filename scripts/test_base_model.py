@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-简单的Stage 1模型评估脚本
-随机抽取训练样本，测试模型输出
+Simple model evaluation script
+Randomly sample training data and test model output
 """
 
 import os
@@ -14,7 +14,7 @@ import re
 from pathlib import Path
 from datetime import datetime
 
-# 添加src路径到Python路径
+# Add src path to Python path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src" / "src"))
 
 from transformers import AutoProcessor, Qwen2_5OmniThinkerForConditionalGeneration
@@ -22,14 +22,14 @@ from open_r1.vlm_modules.qwenomni_module import QwenOmniModule
 from qwen_omni_utils import process_mm_info
 
 
-# 设置随机种子
+# Set random seed
 random.seed(42)
 torch.manual_seed(42)
 
 
 def load_dataset(yaml_path):
-    """加载训练数据集"""
-    print(f"📂 加载数据集: {yaml_path}")
+    """Load training dataset"""
+    print(f"Loading dataset: {yaml_path}")
     
     with open(yaml_path, 'r') as f:
         yaml_data = yaml.safe_load(f)
@@ -41,26 +41,26 @@ def load_dataset(yaml_path):
         json_path = dataset_config.get('json_path')
         data_root = dataset_config.get('data_root')
         
-        print(f"  ├─ 加载: {json_path}")
+        print(f"  Loading: {json_path}")
         
         with open(json_path, 'r') as f:
             data = json.load(f)
         
-        # 添加data_root路径
+        # Prepend data_root path
         if data_root:
             for sample in data:
                 if 'path' in sample:
                     sample['path'] = os.path.join(data_root, sample['path'])
         
         all_samples.extend(data)
-        print(f"  └─ 加载了 {len(data)} 个样本")
+        print(f"  Loaded {len(data)} samples")
     
-    print(f"\n✅ 总共加载 {len(all_samples)} 个样本\n")
+    print(f"\nTotal loaded: {len(all_samples)} samples\n")
     return all_samples
 
 
 def format_question(sample):
-    """格式化问题（和训练时一样）"""
+    """Format the question (same as during training)"""
     if sample['problem_type'] in ['multiple choice', 'emer_ov_mc']:
         question = sample['problem'] + "\nOptions:\n"
         for option in sample.get('options', []):
@@ -72,12 +72,12 @@ def format_question(sample):
 
 
 def create_messages(sample, system_prompt, timestamp_info=None):
-    """创建对话消息（和训练时一样的格式）
+    """Create conversation messages (same format as during training)
     
     Args:
-        sample: 样本数据
-        system_prompt: 系统提示
-        timestamp_info: 可选的时间戳信息字符串，如果提供则添加到用户消息中
+        sample: Sample data
+        system_prompt: System prompt
+        timestamp_info: Optional timestamp info string; if provided, appended to user message
     """
     question = format_question(sample)
     
@@ -94,11 +94,11 @@ def create_messages(sample, system_prompt, timestamp_info=None):
     
     text_prompt = question + "\n" + TYPE_TEMPLATES.get(sample['problem_type'], "")
     
-    # 如果提供了时间戳信息，添加到提示中
+    # If timestamp info is provided, add it to the prompt
     if timestamp_info:
         text_prompt += "\n\n" + timestamp_info
     
-    # 构造messages
+    # Construct messages
     messages = [
         {
             "role": "system",
@@ -115,7 +115,7 @@ def create_messages(sample, system_prompt, timestamp_info=None):
                 {
                     "type": sample.get('data_type', 'video'),
                     sample.get('data_type', 'video'): sample['path'],
-                    "max_frames": 32,  # 与训练时保持一致
+                    "max_frames": 32,  # consistent with training
                     "max_pixels": 602112
                 },
                 {
@@ -130,7 +130,7 @@ def create_messages(sample, system_prompt, timestamp_info=None):
 
 
 def extract_tags(text):
-    """提取<context>, <think>, <answer>标签内容"""
+    """Extract <context>, <think>, <answer> tag contents"""
     context_match = re.search(r'<context>(.*?)</context>', text, re.DOTALL)
     think_match = re.search(r'<think>(.*?)</think>', text, re.DOTALL)
     answer_match = re.search(r'<answer>(.*?)</answer>', text, re.DOTALL)
@@ -143,7 +143,7 @@ def extract_tags(text):
 
 
 def check_format(generated_text):
-    """检查输出格式是否正确"""
+    """Check if output format is correct"""
     has_context = '<context>' in generated_text and '</context>' in generated_text
     has_think = '<think>' in generated_text and '</think>' in generated_text
     has_answer = '<answer>' in generated_text and '</answer>' in generated_text
@@ -158,14 +158,14 @@ def check_format(generated_text):
 
 def main():
     print("=" * 80)
-    print("🧪 HumanOmniV2 基座模型测试脚本")
+    print("Base Model Test Script")
     print("=" * 80)
     print()
     
-    # ==================== 配置 ====================
-    MODEL_PATH = "${PROJECT_ROOT}/models/HumanOmniV2"  # 训练好的HumanOmniV2模型
-    BASE_MODEL_PATH = "${PROJECT_ROOT}/Qwen2.5-Omni-7B-Thinker"  # 基座模型（用于加载processor）
-    DATASET_PATH = "../configs/test_samples.yaml"  # 测试数据集配置
+    # ==================== Configuration ====================
+    MODEL_PATH = "${PROJECT_ROOT}/models/checkpoint"  # trained model
+    BASE_MODEL_PATH = "${PROJECT_ROOT}/Qwen2.5-Omni-7B-Thinker"  # base model (for loading processor)
+    DATASET_PATH = "../configs/test_samples.yaml"  # test dataset config
     
     SYSTEM_PROMPT = """You are a helpful assistant. Your primary goal is to deeply analyze and interpret information from available various modalities (image, video, audio, text context) to answer questions with human-like depth and a clear, traceable thought process.
 
@@ -186,20 +186,20 @@ In reasoning, It is encouraged to incorporate self-reflection and verification i
 Provide your understanding of the image, video, and audio between the <context> </context> tags, detail the reasoning between the <think> </think> tags, and then give your final answer between the <answer> </answer> tags.
 """
     
-    # ==================== 加载模型 ====================
-    print("🔧 加载模型...")
-    print(f"  模型权重路径: {MODEL_PATH}")
-    print(f"  Processor路径: {BASE_MODEL_PATH}")
+    # ==================== Load Model ====================
+    print("Loading model...")
+    print(f"  Model weights path: {MODEL_PATH}")
+    print(f"  Processor path: {BASE_MODEL_PATH}")
     
-    # Processor从基座模型加载（因为训练时只保存了模型权重）
+    # Load processor from base model (only model weights are saved during training)
     processor = AutoProcessor.from_pretrained(BASE_MODEL_PATH, trust_remote_code=True)
     
-    # 覆盖全局配置（防御措施3）
+    # Override global config (safety measure)
     if hasattr(processor, 'image_processor'):
         processor.image_processor.max_pixels = 6422528
         processor.image_processor.min_pixels = 3136
     
-    # 模型权重从训练输出加载
+    # Load model weights from training output
     model = Qwen2_5OmniThinkerForConditionalGeneration.from_pretrained(
         MODEL_PATH,
         torch_dtype=torch.bfloat16,
@@ -208,27 +208,27 @@ Provide your understanding of the image, video, and audio between the <context> 
     )
     model.eval()
     
-    print("✅ 模型加载成功！")
-    print(f"  设备: {model.device}")
+    print("Model loaded successfully!")
+    print(f"  Device: {model.device}")
     print()
     
-    # ==================== 加载数据 ====================
+    # ==================== Load Data ====================
     all_samples = load_dataset(DATASET_PATH)
     
-    # ==================== 随机抽取样本 ====================
+    # ==================== Random Sample Selection ====================
     sample = random.choice(all_samples)
     
-    print("🎲 随机抽取的样本:")
-    print(f"  问题类型: {sample.get('problem_type', 'unknown')}")
-    print(f"  数据类型: {sample.get('data_type', 'unknown')}")
-    print(f"  文件路径: {sample.get('path', 'unknown')}")
-    print(f"  问题: {format_question(sample)[:200]}...")
+    print("Randomly selected sample:")
+    print(f"  Problem type: {sample.get('problem_type', 'unknown')}")
+    print(f"  Data type: {sample.get('data_type', 'unknown')}")
+    print(f"  File path: {sample.get('path', 'unknown')}")
+    print(f"  Question: {format_question(sample)[:200]}...")
     print()
     
-    # ==================== 第一步：先处理视频获取时间戳信息 ====================
-    print("📝 第一步：预处理视频获取时间戳...")
+    # ==================== Step 1: Preprocess video to get timestamp info ====================
+    print("Step 1: Preprocess video to get timestamp info...")
     
-    # 先用不包含时间戳的messages处理一次，获取实际的帧数和时间间隔
+    # First process once without timestamp messages to get actual frame count and interval
     temp_messages = create_messages(sample, SYSTEM_PROMPT, timestamp_info=None)
     temp_texts = processor.apply_chat_template(
         [temp_messages],
@@ -237,10 +237,10 @@ Provide your understanding of the image, video, and audio between the <context> 
     )
     temp_text = temp_texts[0]
     
-    # 处理多模态输入
+    # Process multimodal inputs
     audios, images, videos = process_mm_info(temp_messages, use_audio_in_video=False)
     
-    # 临时处理获取时间戳信息
+    # Temporarily process to get timestamp info
     temp_inputs = processor(
         text=[temp_text],
         images=images,
@@ -252,7 +252,7 @@ Provide your understanding of the image, video, and audio between the <context> 
         max_length=32768
     )
     
-    # 提取时间戳信息
+    # Extract timestamp info
     timestamp_info_str = None
     if 'video_grid_thw' in temp_inputs and temp_inputs['video_grid_thw'] is not None:
         video_grid = temp_inputs['video_grid_thw']
@@ -261,7 +261,7 @@ Provide your understanding of the image, video, and audio between the <context> 
         if 'video_second_per_grid' in temp_inputs and temp_inputs['video_second_per_grid'] is not None:
             second_per_grid = temp_inputs['video_second_per_grid']
             
-            # 获取时间间隔
+            # Get time interval
             if second_per_grid.dim() == 0:
                 interval = second_per_grid.item()
             elif second_per_grid.dim() == 1 and len(second_per_grid) == 1:
@@ -269,10 +269,10 @@ Provide your understanding of the image, video, and audio between the <context> 
             else:
                 interval = second_per_grid.flatten()[0].item()
             
-            # 计算每帧的时间戳
+            # Calculate timestamp per frame
             frame_timestamps = [i * interval for i in range(num_frames)]
             
-            # 构造时间戳信息字符串
+            # Construct timestamp info string
             timestamp_info_str = "[Video Frame Information]\n"
             timestamp_info_str += f"This video has been sampled into {num_frames} frames at {interval:.2f}-second intervals.\n"
             timestamp_info_str += "Available frame timestamps:\n"
@@ -282,13 +282,13 @@ Provide your understanding of the image, video, and audio between the <context> 
             timestamp_info_str += "Use the exact format: \"your observation [Frame N: T.XXs]\"\n"
             timestamp_info_str += "Example: The woman smiles [Frame 5: 5.00s], indicating happiness."
             
-            print(f"  ✅ 提取到 {num_frames} 帧，时间间隔 {interval:.2f}秒/帧")
+            print(f"  Extracted {num_frames} frames, interval {interval:.2f}s/frame")
     
-    # ==================== 第二步：用时间戳信息重新构造完整输入 ====================
-    print("📝 第二步：构造包含时间戳的完整输入...")
+    # ==================== Step 2: Reconstruct full input with timestamp info ====================
+    print("Step 2: Constructing full input with timestamps...")
     messages = create_messages(sample, SYSTEM_PROMPT, timestamp_info=timestamp_info_str)
     
-    # 应用chat template
+    # Apply chat template
     texts = processor.apply_chat_template(
         [messages],
         tokenize=False,
@@ -296,16 +296,16 @@ Provide your understanding of the image, video, and audio between the <context> 
     )
     text = texts[0]
     
-    # 重新处理多模态输入（使用相同的数据）
+    # Reprocess multimodal inputs (using the same data)
     audios, images, videos = process_mm_info(messages, use_audio_in_video=False)
     
-    # 调试：显示提取的多模态数据
-    print(f"  多模态数据提取:")
-    print(f"     - 音频数据: {len(audios) if audios else 0} 个")
-    print(f"     - 图像数据: {len(images) if images else 0} 个")
-    print(f"     - 视频数据: {len(videos) if videos else 0} 个")
+    # Debug: display extracted multimodal data
+    print(f"  Multimodal data extraction:")
+    print(f"     - Audio: {len(audios) if audios else 0}")
+    print(f"     - Images: {len(images) if images else 0}")
+    print(f"     - Videos: {len(videos) if videos else 0}")
     
-    # 读取视频的实际总时长
+    # Read actual total video duration
     video_duration = None
     if videos and len(videos) > 0:
         video_path = sample['path']
@@ -319,7 +319,7 @@ Provide your understanding of the image, video, and audio between the <context> 
                     video_duration = frame_count / fps
                 cap.release()
         except Exception as e:
-            print(f"⚠️  无法读取视频时长: {e}")
+            print(f"Warning: unable to read video duration: {e}")
     
     inputs = processor(
         text=[text],
@@ -328,93 +328,93 @@ Provide your understanding of the image, video, and audio between the <context> 
         audio=audios,
         return_tensors="pt",
         padding=True,
-        truncation=True,  # 防御措施2：truncation保护
+        truncation=True,  # safety: truncation protection
         max_length=32768
     )
     
     inputs = inputs.to(model.device)
     
-    # 防御措施1：实测断言 + 调试信息
+    # Safety: assertion + debug info
     seq_len = inputs['input_ids'].shape[1]
-    print(f"✅ 输入准备完成")
-    print(f"  输入token数: {seq_len}")
+    print(f"Input preparation complete")
+    print(f"  Input token count: {seq_len}")
     
-    # 调试：打印视频像素数据的实际大小
+    # Debug: print actual size of video pixel data
     if 'pixel_values_videos' in inputs and inputs['pixel_values_videos'] is not None:
         vid_shape = inputs['pixel_values_videos'].shape
         vid_size_gb = inputs['pixel_values_videos'].element_size() * inputs['pixel_values_videos'].nelement() / (1024**3)
-        print(f"  视频像素数据shape: {vid_shape}")
-        print(f"  视频像素数据大小: {vid_size_gb:.2f} GB")
+        print(f"  Video pixel data shape: {vid_shape}")
+        print(f"  Video pixel data size: {vid_size_gb:.2f} GB")
     
-    # 打印视频帧数和时间戳信息
+    # Print video frame count and timestamp info
     if 'video_grid_thw' in inputs and inputs['video_grid_thw'] is not None:
         video_grid = inputs['video_grid_thw']
-        num_frames = video_grid[0][0].item()  # T维度就是帧数
-        print(f"  📹 视频分析信息:")
+        num_frames = video_grid[0][0].item()  # T dimension is frame count
+        print(f"  Video analysis info:")
         if video_duration is not None:
-            print(f"     - 视频总时长: {video_duration:.2f}秒")
-        print(f"     - 采样帧数: {num_frames} 帧")
-        print(f"     - 网格维度 (T×H×W): {video_grid[0][0].item()}×{video_grid[0][1].item()}×{video_grid[0][2].item()}")
+            print(f"     - Total video duration: {video_duration:.2f}s")
+        print(f"     - Sampled frames: {num_frames}")
+        print(f"     - Grid dimensions (T*H*W): {video_grid[0][0].item()}x{video_grid[0][1].item()}x{video_grid[0][2].item()}")
         
-        # 打印每帧的时间戳
+        # Print timestamps per frame
         if 'video_second_per_grid' in inputs and inputs['video_second_per_grid'] is not None:
             second_per_grid = inputs['video_second_per_grid']
             
-            # video_second_per_grid 是每个时间网格的秒数（间隔），不是时间戳列表
+            # video_second_per_grid is seconds per temporal grid (interval), not a timestamp list
             if second_per_grid.dim() == 0:
                 interval = second_per_grid.item()
             elif second_per_grid.dim() == 1 and len(second_per_grid) == 1:
                 interval = second_per_grid[0].item()
             else:
-                # 如果是多个值，取第一个
+                # If multiple values, take the first
                 interval = second_per_grid.flatten()[0].item()
             
-            # 根据帧数和时间间隔计算每帧的时间戳
+            # Calculate timestamps for each frame from frame count and interval
             frame_timestamps = [i * interval for i in range(num_frames)]
             
-            print(f"     - 时间间隔: {interval:.2f}秒/帧")
-            print(f"     - 采样覆盖范围: {frame_timestamps[0]:.2f}秒 ~ {frame_timestamps[-1]:.2f}秒")
-            print(f"     - 采样跨度: {frame_timestamps[-1] - frame_timestamps[0]:.2f}秒")
+            print(f"     - Time interval: {interval:.2f}s/frame")
+            print(f"     - Sampling coverage: {frame_timestamps[0]:.2f}s ~ {frame_timestamps[-1]:.2f}s")
+            print(f"     - Sampling span: {frame_timestamps[-1] - frame_timestamps[0]:.2f}s")
             
-            # 显示所有帧的时间戳
+            # Show all frame timestamps
             timestamps_str = [f'{t:.2f}s' for t in frame_timestamps]
-            print(f"     - 各帧时间戳 ({num_frames}帧): {timestamps_str}")
+            print(f"     - Frame timestamps ({num_frames} frames): {timestamps_str}")
     
-    # 打印音频信息
+    # Print audio info
     if 'input_features' in inputs and inputs['input_features'] is not None:
         audio_features = inputs['input_features']
-        print(f"  🎵 音频分析信息:")
-        print(f"     - 音频特征shape: {audio_features.shape}")
+        print(f"  Audio analysis info:")
+        print(f"     - Audio feature shape: {audio_features.shape}")
         
         if 'audio_feature_lengths' in inputs and inputs['audio_feature_lengths'] is not None:
             audio_lengths = inputs['audio_feature_lengths']
-            print(f"     - 音频特征长度: {audio_lengths}")
-            # 音频采样率通常是16kHz，每个特征对应一定时长
-            # Qwen2.5-Omni的音频处理：每秒约50个特征帧
+            print(f"     - Audio feature lengths: {audio_lengths}")
+            # Audio sample rate is typically 16kHz, each feature corresponds to a certain duration
+            # Audio processing: ~50 feature frames per second
             if audio_lengths.numel() > 0:
                 total_audio_frames = audio_lengths[0].item() if audio_lengths.dim() > 0 else audio_lengths.item()
-                # 假设每秒50个音频特征帧（这是Whisper等模型的常见设置）
+                # Assuming ~50 audio feature frames per second (common for Whisper-like models)
                 audio_duration_estimate = total_audio_frames / 50.0
-                print(f"     - 音频时长估计: {audio_duration_estimate:.2f}秒 (基于特征帧数)")
+                print(f"     - Estimated audio duration: {audio_duration_estimate:.2f}s (based on feature frames)")
     
     if seq_len > 32768:
-        raise AssertionError(f"序列太长: {seq_len} > 32768")
+        raise AssertionError(f"Sequence too long: {seq_len} > 32768")
     print()
     
-    # ==================== 生成输出 ====================
-    print("🤖 开始生成输出...")
+    # ==================== Generate Output ====================
+    print("Starting generation...")
     print("-" * 80)
     
     with torch.no_grad():
         generated_ids = model.generate(
             **inputs,
             max_new_tokens=1024,
-            do_sample=False,  # 贪婪解码，确保结果稳定
+            do_sample=False,  # greedy decoding for stable results
             temperature=1.0,
             top_p=0.9
         )
     
-    # 只取生成的部分（去掉输入）
+    # Only take generated part (remove input)
     generated_ids = [
         output_ids[len(input_ids):] 
         for input_ids, output_ids in zip(inputs.input_ids, generated_ids)
@@ -426,26 +426,26 @@ Provide your understanding of the image, video, and audio between the <context> 
         clean_up_tokenization_spaces=False
     )[0]
     
-    print("生成完成！")
+    print("Generation complete!")
     print("-" * 80)
     print()
     
-    # ==================== 分析输出 ====================
-    print("📊 输出分析:")
+    # ==================== Analyze Output ====================
+    print("Output analysis:")
     print("=" * 80)
     
-    # 1. 格式检查
+    # 1. Format check
     format_check = check_format(generated_text)
-    print("\n【格式检查】")
-    print(f"  ✓ 包含 <context>: {'✅' if format_check['has_context'] else '❌'}")
-    print(f"  ✓ 包含 <think>:   {'✅' if format_check['has_think'] else '❌'}")
-    print(f"  ✓ 包含 <answer>:  {'✅' if format_check['has_answer'] else '❌'}")
-    print(f"  ✓ 格式完整:       {'✅ 正确' if format_check['all_correct'] else '❌ 错误'}")
+    print("\n[Format Check]")
+    print(f"  Has <context>: {'PASS' if format_check['has_context'] else 'FAIL'}")
+    print(f"  Has <think>:   {'PASS' if format_check['has_think'] else 'FAIL'}")
+    print(f"  Has <answer>:  {'PASS' if format_check['has_answer'] else 'FAIL'}")
+    print(f"  Format valid:  {'PASS' if format_check['all_correct'] else 'FAIL'}")
     
-    # 2. 提取内容
+    # 2. Extract content
     extracted = extract_tags(generated_text)
     
-    print("\n【生成内容】")
+    print("\n[Generated Content]")
     if extracted['context']:
         print(f"\n<context>")
         print(f"{extracted['context'][:300]}...")
@@ -461,41 +461,41 @@ Provide your understanding of the image, video, and audio between the <context> 
         print(f"{extracted['answer']}")
         print(f"</answer>")
     
-    # 3. 与标准答案对比
+    # 3. Compare with ground truth
     ground_truth_solution = sample.get('solution', '')
     ground_truth_answer = sample.get('answer', '')
     
-    print("\n【标准答案对比】")
+    print("\n[Ground Truth Comparison]")
     print(f"  Ground Truth Answer: {ground_truth_answer}")
     if extracted['answer']:
         print(f"  Generated Answer:    {extracted['answer']}")
         
-        # 简单的答案匹配
+        # Simple answer matching
         if extracted['answer'].strip() == ground_truth_answer.strip():
-            print(f"  匹配结果: ✅ 完全匹配")
+            print(f"  Match result: EXACT MATCH")
         elif ground_truth_answer.strip() in extracted['answer'].strip():
-            print(f"  匹配结果: ⚠️ 部分匹配")
+            print(f"  Match result: PARTIAL MATCH")
         else:
-            print(f"  匹配结果: ❌ 不匹配")
+            print(f"  Match result: NO MATCH")
     else:
-        print(f"  Generated Answer:    ❌ 未能提取")
+        print(f"  Generated Answer:    FAILED TO EXTRACT")
     
-    # 4. 完整输出
-    print("\n【完整生成文本】")
+    # 4. Full output
+    print("\n[Full Generated Text]")
     print("-" * 80)
     print(generated_text)
     print("-" * 80)
     
-    # ==================== 保存结果 ====================
-    # 创建logs目录
+    # ==================== Save Results ====================
+    # Create logs directory
     log_dir = Path("../logs")
     log_dir.mkdir(exist_ok=True)
     
-    # 生成时间戳文件名
+    # Generate timestamped filename
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_file = log_dir / f"basemodel_test_result_{timestamp}.json"
     
-    # 准备保存的数据
+    # Prepare data to save
     test_result = {
         "timestamp": timestamp,
         "model_path": MODEL_PATH,
@@ -518,21 +518,21 @@ Provide your understanding of the image, video, and audio between the <context> 
         }
     }
     
-    # 保存到JSON文件
+    # Save to JSON file
     with open(output_file, 'w', encoding='utf-8') as f:
         json.dump(test_result, f, ensure_ascii=False, indent=2)
     
-    print(f"\n💾 测试结果已保存到: {output_file}")
+    print(f"\nTest results saved to: {output_file}")
     
-    # ==================== 总结 ====================
+    # ==================== Summary ====================
     print("\n" + "=" * 80)
-    print("✅ 评估完成！")
+    print("Evaluation complete!")
     print("=" * 80)
     
-    print("\n💡 提示:")
-    print("  - 如果格式正确，说明模型学会了输出结构")
-    print("  - 如果答案匹配，说明模型理解了任务")
-    print("  - 可以多次运行脚本测试不同样本")
+    print("\nNotes:")
+    print("  - If format is correct, the model has learned the output structure")
+    print("  - If answer matches, the model understands the task")
+    print("  - Run the script multiple times to test different samples")
     print()
 
 

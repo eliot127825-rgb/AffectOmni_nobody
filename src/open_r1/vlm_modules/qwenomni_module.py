@@ -15,11 +15,11 @@ from open_r1.vlm_modules.vlm_module import VLMBaseModule
 import requests
 import re
 
-# Stage 4: 导入人物关注度 reward 函数
+# Stage 4: Import people focus reward function
 from open_r1.vlm_modules.people_focus_reward import people_focus_reward
 
 
-# 注释掉API环境变量，这些用于外部API调用的奖励函数，在本地训练中不需要
+# API environment variables for external API-based reward functions (optional for local training)
 # url = os.environ["API"]
 # token = os.environ["API_KEY"]
 url = os.environ.get("API", "")
@@ -42,7 +42,7 @@ def gpt_api(prompt, model_name):
 
             data = {
 
-                    "model": "qwen2.5-72b-instruct",
+                    "model": model_name,
                     "messages":messages,
                     # "n": 1
                 }
@@ -111,7 +111,7 @@ class QwenOmniModule(VLMBaseModule):
             print(f"audios type: {type(audios)}, count: {len(audios) if audios else 0}")
             print(f"prompts_text[0] contains VIDEO: {'VIDEO' in prompts_text[0]}")
             print(f"prompts_text[0] contains AUDIO: {'AUDIO' in prompts_text[0]}")
-            # 打印 prompts_text 的前500字符
+            # Print first 500 characters of prompts_text
             print(f"prompts_text[0][:500]:\n{prompts_text[0][:500]}")
             print(f"===========================\n")
         
@@ -126,7 +126,7 @@ class QwenOmniModule(VLMBaseModule):
             add_special_tokens=add_special_tokens,
             use_audio_in_video=use_audio_in_video)
         
-        # Debug: 检查 processor 输出
+        # Debug: check processor output
         if is_main:
             print(f"\n=== QwenOmni Module Debug (AFTER processor) ===")
             print(f"prompt_inputs keys: {list(prompt_inputs.keys())}")
@@ -141,7 +141,7 @@ class QwenOmniModule(VLMBaseModule):
                 else:
                     print(f"  {k}: None")
             
-            # 检查关键的多模态输入是否存在
+            # Check whether critical multimodal inputs exist
             critical_keys = ['pixel_values_videos', 'video_grid_thw', 'input_features', 'feature_attention_mask']
             missing_keys = [k for k in critical_keys if k not in prompt_inputs or prompt_inputs.get(k) is None]
             if missing_keys:

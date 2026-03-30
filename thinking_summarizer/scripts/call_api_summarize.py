@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-调用API生成thinking总结和SAM3指令
-支持OpenAI API、Qwen API等
+Call API to generate thinking summaries and SAM3 instructions.
+Supports OpenAI API, Qwen API, etc.
 """
 
 import os
@@ -59,7 +59,7 @@ Please segment the following in the video: [detailed object 1], [detailed object
 """
 
 def call_openai_api(prompt: str, api_key: str, model: str = "gpt-4") -> str:
-    """调用OpenAI API"""
+    """Call OpenAI API"""
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
@@ -85,10 +85,10 @@ def call_openai_api(prompt: str, api_key: str, model: str = "gpt-4") -> str:
     if response.status_code == 200:
         return response.json()['choices'][0]['message']['content']
     else:
-        raise Exception(f"API调用失败: {response.status_code}, {response.text}")
+        raise Exception(f"API call failed: {response.status_code}, {response.text}")
 
 def call_qwen_api(prompt: str, api_key: str, model: str = "qwen-max") -> str:
-    """调用Qwen API"""
+    """Call Qwen API"""
     import dashscope
     from dashscope import Generation
     
@@ -108,10 +108,10 @@ def call_qwen_api(prompt: str, api_key: str, model: str = "qwen-max") -> str:
     if response.status_code == 200:
         return response.output.choices[0].message.content
     else:
-        raise Exception(f"API调用失败: {response.status_code}, {response.message}")
+        raise Exception(f"API call failed: {response.status_code}, {response.message}")
 
 def parse_summary(summary_text: str) -> Dict:
-    """解析API返回的总结文本"""
+    """Parse the summary text returned by the API"""
     result = {
         'key_points': [],
         'focus_objects': {
@@ -123,7 +123,7 @@ def parse_summary(summary_text: str) -> Dict:
         'sam3_instruction': ''
     }
     
-    # 提取关键要点
+    # Extract key points
     import re
     points_pattern = r'## Key Points Analysis\n(.*?)(?=\n##|\Z)'
     points_match = re.search(points_pattern, summary_text, re.DOTALL)
@@ -132,8 +132,8 @@ def parse_summary(summary_text: str) -> Dict:
         points = re.findall(r'\d+\.\s*(.+)', points_text)
         result['key_points'] = [p.strip() for p in points]
     
-    # 提取重点对象（新格式：Primary/Secondary Objects）
-    # 提取Primary Objects
+    # Extract focus objects (new format: Primary/Secondary Objects)
+    # Extract Primary Objects
     primary_pattern = r'### Primary Objects.*?\n(.*?)(?=\n###|\n##|\Z)'
     primary_match = re.search(primary_pattern, summary_text, re.DOTALL)
     if primary_match:
@@ -141,7 +141,7 @@ def parse_summary(summary_text: str) -> Dict:
         primary_objects = re.findall(r'-\s*(\w+):\s*(.+)', primary_text)
         result['focus_objects']['people'] = [f"{obj[0]}: {obj[1].strip()}" for obj in primary_objects]
     
-    # 提取Secondary Objects
+    # Extract Secondary Objects
     secondary_pattern = r'### Secondary Objects.*?\n(.*?)(?=\n##|\Z)'
     secondary_match = re.search(secondary_pattern, summary_text, re.DOTALL)
     if secondary_match:
@@ -149,7 +149,7 @@ def parse_summary(summary_text: str) -> Dict:
         secondary_objects = re.findall(r'-\s*(\w+):\s*(.+)', secondary_text)
         result['focus_objects']['objects'] = [f"{obj[0]}: {obj[1].strip()}" for obj in secondary_objects]
     
-    # 提取情绪指标
+    # Extract emotional indicators
     emotion_pattern = r'## Emotional Indicators.*?\n(.*?)(?=\n##|\Z)'
     emotion_match = re.search(emotion_pattern, summary_text, re.DOTALL)
     if emotion_match:
@@ -157,7 +157,7 @@ def parse_summary(summary_text: str) -> Dict:
         emotions = re.findall(r'-\s*(.+)', emotion_text)
         result['emotional_indicators'] = [e.strip() for e in emotions]
     
-    # 提取SAM3指令
+    # Extract SAM3 instructions
     sam3_pattern = r'## SAM3 Segmentation Instructions\n(.+?)(?=\n##|\Z)'
     sam3_match = re.search(sam3_pattern, summary_text, re.DOTALL)
     if sam3_match:
@@ -182,56 +182,56 @@ def main():
     
     args = parser.parse_args()
     
-    # 设置默认模型
+    # Set default model
     if args.model is None:
         args.model = 'gpt-4' if args.api_type == 'openai' else 'qwen-max'
     
-    # 创建输出目录
+    # Create output directory
     output_dir = Path(args.output_path)
     output_dir.mkdir(parents=True, exist_ok=True)
     
     print("=" * 80)
-    print("API总结配置")
+    print("API Summary Config")
     print("=" * 80)
-    print(f"输入文件: {args.input_path}")
-    print(f"输出路径: {args.output_path}")
-    print(f"API类型: {args.api_type}")
-    print(f"模型: {args.model}")
+    print(f"Input file: {args.input_path}")
+    print(f"Output path: {args.output_path}")
+    print(f"API type: {args.api_type}")
+    print(f"Model: {args.model}")
     print("=" * 80)
     
-    # 加载thinking数据
-    print("\n加载thinking数据...")
+    # Load thinking data
+    print("\nLoading thinking data...")
     with open(args.input_path, 'r', encoding='utf-8') as f:
         thinking_data = json.load(f)
     
     if args.max_samples:
         thinking_data = thinking_data[:args.max_samples]
     
-    print(f"共加载 {len(thinking_data)} 个样本")
+    print(f"Loaded {len(thinking_data)} samples")
     
-    # 选择API调用函数
+    # Select API call function
     api_call_func = call_openai_api if args.api_type == 'openai' else call_qwen_api
     
-    # 批量处理
+    # Batch processing
     results = []
     failed = []
     
-    print("\n开始生成总结...")
+    print("\nStarting summary generation...")
     for i, item in enumerate(tqdm(thinking_data)):
         try:
             
-            # 构造prompt
+            # Build prompt
             thinking_text = item.get('thinking', '')
             if not thinking_text:
-                print(f"\n⚠️  {item['video_id']} 没有thinking内容，跳过")
+                print(f"\n{item['video_id']} has no thinking content, skipping")
                 continue
             
             prompt = SUMMARIZE_PROMPT_TEMPLATE.format(thinking_text=thinking_text)
             
-            # 调用API
+            # Call API
             summary_text = api_call_func(prompt, args.api_key, args.model)
             
-            # 解析结果
+            # Parse results
             parsed_summary = parse_summary(summary_text)
             
             result = {
@@ -245,50 +245,50 @@ def main():
             
             results.append(result)
             
-            # API限流
+            # API rate limiting
             time.sleep(0.5)
             
-            # 定期保存汇总
+            # Periodically save
             if (i + 1) % 50 == 0:
                 batch_file = output_dir / f'summaries_batch_{i+1}.json'
                 with open(batch_file, 'w', encoding='utf-8') as f:
                     json.dump(results[-50:], f, ensure_ascii=False, indent=2)
         
         except Exception as e:
-            print(f"\n处理 {item['video_id']} 时出错: {str(e)}")
+            print(f"\nError processing {item['video_id']}: {str(e)}")
             failed.append({
                 'video_id': item['video_id'],
                 'error': str(e)
             })
             continue
     
-    # 保存最终结果
+    # Save final results
     output_file = output_dir / 'summaries_all.json'
     with open(output_file, 'w', encoding='utf-8') as f:
         json.dump(results, f, ensure_ascii=False, indent=2)
     
-    # 保存失败记录
+    # Save failure records
     if failed:
         failed_file = output_dir / 'failed_samples.json'
         with open(failed_file, 'w', encoding='utf-8') as f:
             json.dump(failed, f, ensure_ascii=False, indent=2)
     
     print("\n" + "=" * 80)
-    print(f"✅ 完成！")
-    print(f"成功处理: {len(results)} 个样本")
-    print(f"失败: {len(failed)} 个样本")
-    print(f"输出文件: {output_file}")
+    print(f"Done!")
+    print(f"Successfully processed: {len(results)} samples")
+    print(f"Failed: {len(failed)} samples")
+    print(f"Output file: {output_file}")
     if failed:
-        print(f"失败记录: {failed_file}")
+        print(f"Failure records: {failed_file}")
     print("=" * 80)
     
-    # 统计信息
+    # Statistics
     if results:
         key_points_counts = [len(r['parsed_summary']['key_points']) for r in results]
-        print(f"\n要点统计:")
-        print(f"  平均要点数: {sum(key_points_counts) / len(key_points_counts):.1f}")
-        print(f"  最少: {min(key_points_counts)}")
-        print(f"  最多: {max(key_points_counts)}")
+        print(f"\nKey points statistics:")
+        print(f"  Average count: {sum(key_points_counts) / len(key_points_counts):.1f}")
+        print(f"  Minimum: {min(key_points_counts)}")
+        print(f"  Maximum: {max(key_points_counts)}")
 
 if __name__ == '__main__':
     main()

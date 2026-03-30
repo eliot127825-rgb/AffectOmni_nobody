@@ -1,6 +1,6 @@
 """
-CLIP 图文匹配模块
-使用 CLIP/OpenCLIP 进行事件与视频帧的相似度匹配
+CLIP image-text matching module.
+Uses CLIP/OpenCLIP for event-to-video-frame similarity matching.
 """
 
 import numpy as np
@@ -24,7 +24,7 @@ except ImportError:
 
 
 class CLIPMatcher:
-    """CLIP 图文匹配器"""
+    """CLIP image-text matcher"""
     
     def __init__(
         self,
@@ -34,24 +34,24 @@ class CLIPMatcher:
         use_original_clip: bool = False
     ):
         """
-        初始化 CLIP 匹配器
+        Initialize the CLIP matcher.
         
         Args:
-            model_name: 模型名称，如 "ViT-B-32", "ViT-L-14"
-            pretrained: 预训练权重，如 "openai", "laion2b_s34b_b79k"
-            device: 设备 "cuda" 或 "cpu"
-            use_original_clip: 是否强制使用原版 CLIP（离线友好）
+            model_name: Model name, e.g. "ViT-B-32", "ViT-L-14"
+            pretrained: Pretrained weights, e.g. "openai", "laion2b_s34b_b79k"
+            device: Device "cuda" or "cpu"
+            use_original_clip: Whether to force using the original CLIP (offline-friendly)
         """
         self.device = device
         
-        # 优先使用原版 CLIP（离线友好）或根据参数选择
+        # Prefer original CLIP (offline-friendly) or choose based on parameter
         if use_original_clip or not HAS_OPEN_CLIP:
             if HAS_CLIP:
                 self._init_clip(model_name)
             else:
                 raise RuntimeError("CLIP not available. Install with: pip install git+https://github.com/openai/CLIP.git")
         else:
-            # 尝试使用 open_clip，失败则 fallback
+            # Try open_clip, fallback on failure
             try:
                 self._init_open_clip(model_name, pretrained)
             except Exception as e:
@@ -62,7 +62,7 @@ class CLIPMatcher:
                     raise RuntimeError("Neither open_clip nor clip is available.")
         
     def _init_open_clip(self, model_name: str, pretrained: str):
-        """初始化 OpenCLIP"""
+        """Initialize OpenCLIP"""
         self.backend = "open_clip"
         self.model, _, self.preprocess = open_clip.create_model_and_transforms(
             model_name, 
@@ -74,10 +74,10 @@ class CLIPMatcher:
         print(f"✅ Loaded OpenCLIP: {model_name} ({pretrained})")
     
     def _init_clip(self, model_name: str):
-        """初始化原版 CLIP（fallback）"""
+        """Initialize original CLIP (fallback)"""
         self.backend = "clip"
-        # 原版 CLIP 模型名称格式：ViT-B/32, ViT-L/14, RN50 等
-        # 只替换第二个 - 为 /（例如 ViT-B-32 -> ViT-B/32）
+        # Original CLIP model name format: ViT-B/32, ViT-L/14, RN50, etc.
+        # Only replace the second '-' with '/' (e.g. ViT-B-32 -> ViT-B/32)
         if model_name.count('-') >= 2:
             parts = model_name.split('-')
             clip_model_name = f"{parts[0]}-{parts[1]}/{'-'.join(parts[2:])}"
@@ -95,31 +95,31 @@ class CLIPMatcher:
         return_scores: bool = False
     ) -> Dict[str, int]:
         """
-        将事件匹配到最相似的帧
+        Match events to the most similar frames.
         
         Args:
-            events: 事件描述列表，如 ["woman picks up rose", "man smiles"]
-            frames_pil: 视频帧列表（PIL.Image）
-            return_scores: 是否返回相似度分数
+            events: List of event descriptions, e.g. ["woman picks up rose", "man smiles"]
+            frames_pil: List of video frames (PIL.Image)
+            return_scores: Whether to return similarity scores
         
         Returns:
             event_to_frame: {event: best_frame_id}
-            如果 return_scores=True，还返回 {event: (best_frame_id, score)}
+            If return_scores=True, returns {event: (best_frame_id, score)}
         """
         if not events or not frames_pil:
             return {}
         
-        # 编码所有帧
+        # Encode all frames
         frame_features = self._encode_images(frames_pil)  # (N_frames, D)
         
-        # 编码所有事件
+        # Encode all events
         text_features = self._encode_texts(events)  # (N_events, D)
         
-        # 计算相似度矩阵
+        # Compute similarity matrix
         # (N_events, N_frames)
         similarity_matrix = text_features @ frame_features.T
         
-        # 为每个事件找到最匹配的帧
+        # Find the best matching frame for each event
         best_frames = np.argmax(similarity_matrix, axis=1)
         
         if return_scores:
@@ -140,38 +140,38 @@ class CLIPMatcher:
         frames_pil: List[Image.Image]
     ) -> np.ndarray:
         """
-        获取完整的相似度矩阵（用于 DP 约束）
+        Get the full similarity matrix (for DP constraints).
         
         Returns:
-            similarity_matrix: (N_events, N_frames) 的相似度矩阵
+            similarity_matrix: (N_events, N_frames) similarity matrix
         """
         frame_features = self._encode_images(frames_pil)
         text_features = self._encode_texts(events)
         return text_features @ frame_features.T
     
     def _encode_images(self, images: List[Image.Image]) -> np.ndarray:
-        """批量编码图像"""
+        """Batch encode images"""
         import torch
         
-        # 预处理图像
+        # Preprocess images
         image_inputs = torch.stack([
             self.preprocess(img) for img in images
         ]).to(self.device)
         
-        # 编码
+        # Encode
         with torch.no_grad():
             if self.backend == "open_clip":
                 image_features = self.model.encode_image(image_inputs)
             else:  # clip
                 image_features = self.model.encode_image(image_inputs)
             
-            # 归一化
+            # Normalize
             image_features = image_features / image_features.norm(dim=-1, keepdim=True)
         
         return image_features.cpu().numpy()
     
     def _encode_texts(self, texts: List[str]) -> np.ndarray:
-        """批量编码文本"""
+        """Batch encode texts"""
         import torch
         
         # Tokenize
@@ -180,10 +180,10 @@ class CLIPMatcher:
         else:  # clip
             text_inputs = clip.tokenize(texts).to(self.device)
         
-        # 编码
+        # Encode
         with torch.no_grad():
             text_features = self.model.encode_text(text_inputs)
-            # 归一化
+            # Normalize
             text_features = text_features / text_features.norm(dim=-1, keepdim=True)
         
         return text_features.cpu().numpy()
@@ -194,16 +194,16 @@ def match_with_monotonic_constraint(
     lambda_smooth: float = 0.3
 ) -> List[int]:
     """
-    使用 DP（Viterbi）强制事件帧号单调非递减
+    Use DP (Viterbi) to enforce monotonically non-decreasing event frame indices.
     
     Args:
-        similarity_matrix: (N_events, N_frames) 相似度矩阵
-        lambda_smooth: 平滑惩罚系数，越大越倾向于帧号平滑增长
+        similarity_matrix: (N_events, N_frames) similarity matrix
+        lambda_smooth: Smoothing penalty coefficient; larger values favor smoother frame progression
     
     Returns:
-        best_frames: 每个事件的最佳帧号 (长度为 N_events)
+        best_frames: Best frame index for each event (length N_events)
     
-    目标函数：
+    Objective:
         maximize: sum_i S[i, f_i] - lambda * |f_i - f_{i-1}|
         constraint: f_i >= f_{i-1}
     """
@@ -212,20 +212,20 @@ def match_with_monotonic_constraint(
     if N_events == 0:
         return []
     
-    # DP 表: dp[i][f] = 前 i 个事件，第 i 个事件选择帧 f 的最大得分
+    # DP table: dp[i][f] = max score for first i events, with event i assigned to frame f
     dp = np.full((N_events, N_frames), -np.inf)
     backtrack = np.zeros((N_events, N_frames), dtype=int)
     
-    # 初始化：第一个事件可以选任意帧
+    # Initialization: the first event can be assigned to any frame
     dp[0, :] = similarity_matrix[0, :]
     
-    # DP 转移
+    # DP transition
     for i in range(1, N_events):
         for f in range(N_frames):
-            # 第 i 个事件选择帧 f
-            # 第 i-1 个事件只能选择 <= f 的帧（单调约束）
+            # Event i is assigned to frame f
+            # Event i-1 can only be assigned to frames <= f (monotonic constraint)
             for f_prev in range(f + 1):
-                # 转移代价：相似度 - 帧跳跃惩罚
+                # Transition cost: similarity - frame jump penalty
                 transition_score = dp[i-1, f_prev] - lambda_smooth * abs(f - f_prev)
                 score = similarity_matrix[i, f] + transition_score
                 
@@ -233,11 +233,11 @@ def match_with_monotonic_constraint(
                     dp[i, f] = score
                     backtrack[i, f] = f_prev
     
-    # 回溯找到最优路径
+    # Backtrack to find the optimal path
     best_frames = []
     best_last_frame = np.argmax(dp[N_events - 1, :])
     
-    # 从后往前回溯
+    # Backtrack from end to start
     f = best_last_frame
     for i in range(N_events - 1, -1, -1):
         best_frames.append(f)
@@ -248,10 +248,10 @@ def match_with_monotonic_constraint(
     return best_frames
 
 
-# 便捷函数
+# Convenience function
 def create_matcher(
     model_name: str = "ViT-B-32",
     device: str = "cuda"
 ) -> CLIPMatcher:
-    """创建 CLIP 匹配器的便捷函数"""
+    """Convenience function to create a CLIP matcher"""
     return CLIPMatcher(model_name=model_name, device=device)

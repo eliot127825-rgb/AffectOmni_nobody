@@ -436,7 +436,7 @@ def main(args):
             except torch.cuda.OutOfMemoryError as e:
                 print(f"[OOM] Skipping batch due to CUDA OOM: {e}")
                 torch.cuda.empty_cache()
-                # 跳过该样本，记录为空输出
+                # Skip this sample and record empty output
                 for sample in inputs:
                     sample.pop("images", None)
                     sample.pop("videos", None)
@@ -475,7 +475,7 @@ def main(args):
                
                 # think_chain = extract_think(response)
                 final_ans = extract_answer(response)# response #extract_answer(response)
-                gt_ans = gt.strip()  # gt本身就是答案，不需要extract
+                gt_ans = gt.strip()  # gt is already the answer, no extraction needed
                 if final_ans == "":
                     final_ans = model_output
                
@@ -521,7 +521,7 @@ if __name__ == "__main__":
 export PYTHONPATH=./
 
 python -m torch.distributed.launch --use_env  --nproc_per_node 8 --master-port 29502 --nnodes 1  eval/eval_humanomniv2.py \
-    --model-path output/qwenomni-stage3  \
+    --model-path <model_checkpoint_path>  \
     --file-name humanomniv2
 
 """

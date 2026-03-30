@@ -745,7 +745,7 @@ class VLMGRPOTrainer(Trainer):
             use_audio_in_video=use_audio_in_video,
         )
         
-        # Debug: 检查 prompt_inputs 中的多模态数据
+        # Debug: check multimodal data in prompt_inputs
         if self.state.global_step == 0 and self.accelerator.is_main_process:
             print(f"\n=== DEBUG: prompt_inputs keys ===")
             print(f"Keys: {list(prompt_inputs.keys())}")
@@ -776,13 +776,13 @@ class VLMGRPOTrainer(Trainer):
 
         # Generate completions
         with unwrap_model_for_generation(self.model_wrapped, self.accelerator) as unwrapped_model:
-            # Debug: 检查传入 generate 的参数
+            # Debug: check arguments passed to generate
             generate_kwargs = {k: v for k, v in prompt_inputs.items() if k not in self.vlm_module.get_non_generate_params()}
             if self.state.global_step == 0 and self.accelerator.is_main_process:
                 print(f"\n=== DEBUG: generate kwargs ===")
                 print(f"Keys passed to generate: {list(generate_kwargs.keys())}")
                 print(f"Keys excluded: {self.vlm_module.get_non_generate_params()}")
-                # 检查关键的多模态输入
+                # Check key multimodal inputs
                 for key in ['pixel_values_videos', 'video_grid_thw', 'input_features', 'feature_attention_mask', 'audio_feature_lengths']:
                     if key in generate_kwargs:
                         v = generate_kwargs[key]
@@ -796,18 +796,18 @@ class VLMGRPOTrainer(Trainer):
                         print(f"  {key}: NOT IN generate_kwargs")
                 print(f"================================\n")
             
-            # 临时禁用 gradient checkpointing 以启用 KV cache 加速生成
-            # gradient checkpointing 与 use_cache=True 不兼容
+            # Temporarily disable gradient checkpointing to enable KV cache for faster generation
+            # gradient checkpointing is incompatible with use_cache=True
             
-            # DEBUG: 详细诊断 gradient checkpointing 状态
+            # DEBUG: detailed gradient checkpointing diagnostics
             if self.state.global_step == 0 and self.accelerator.is_main_process:
-                print(f"\n=== DEBUG: Gradient Checkpointing 诊断 ===")
+                print(f"\n=== DEBUG: Gradient Checkpointing Diagnostics ===")
                 print(f"  type(unwrapped_model): {type(unwrapped_model)}")
                 print(f"  hasattr is_gradient_checkpointing: {hasattr(unwrapped_model, 'is_gradient_checkpointing')}")
                 if hasattr(unwrapped_model, 'is_gradient_checkpointing'):
                     print(f"  unwrapped_model.is_gradient_checkpointing: {unwrapped_model.is_gradient_checkpointing}")
                 print(f"  unwrapped_model.config.use_cache: {unwrapped_model.config.use_cache}")
-                # 检查 thinker 模型
+                # Check thinker model
                 if hasattr(unwrapped_model, 'thinker'):
                     print(f"  unwrapped_model.thinker.is_gradient_checkpointing: {getattr(unwrapped_model.thinker, 'is_gradient_checkpointing', 'N/A')}")
                     if hasattr(unwrapped_model.thinker, 'model'):
@@ -819,15 +819,15 @@ class VLMGRPOTrainer(Trainer):
             
             if gc_was_enabled:
                 if self.state.global_step == 0 and self.accelerator.is_main_process:
-                    print(f"[DEBUG] 临时禁用 gradient checkpointing 以加速生成...")
+                    print(f"[DEBUG] Temporarily disabling gradient checkpointing for faster generation...")
                 unwrapped_model.gradient_checkpointing_disable()
                 unwrapped_model.config.use_cache = True
                 if self.state.global_step == 0 and self.accelerator.is_main_process:
-                    print(f"[DEBUG] 禁用后 is_gradient_checkpointing: {unwrapped_model.is_gradient_checkpointing}")
-                    print(f"[DEBUG] 禁用后 config.use_cache: {unwrapped_model.config.use_cache}")
+                    print(f"[DEBUG] After disabling, is_gradient_checkpointing: {unwrapped_model.is_gradient_checkpointing}")
+                    print(f"[DEBUG] After disabling, config.use_cache: {unwrapped_model.config.use_cache}")
             else:
                 if self.state.global_step == 0 and self.accelerator.is_main_process:
-                    print(f"[DEBUG] ⚠️ gc_was_enabled=False，不会禁用 gradient checkpointing!")
+                    print(f"[DEBUG] WARNING: gc_was_enabled=False, gradient checkpointing will NOT be disabled!")
             
             try:
                 generate_returned_result = unwrapped_model.generate(
@@ -835,12 +835,12 @@ class VLMGRPOTrainer(Trainer):
                     generation_config=self.generation_config
                 )
             finally:
-                # 恢复 gradient checkpointing 状态
+                # Restore gradient checkpointing state
                 if gc_was_enabled:
                     unwrapped_model.gradient_checkpointing_enable()
                     unwrapped_model.config.use_cache = False
                     if self.state.global_step == 0 and self.accelerator.is_main_process:
-                        print(f"[DEBUG] 已恢复 gradient checkpointing")
+                        print(f"[DEBUG] Gradient checkpointing restored")
             prompt_length = prompt_ids.size(1)
             if not self.vlm_module.is_embeds_input():
                 prompt_completion_ids = generate_returned_result

@@ -1,12 +1,10 @@
 """
-Thinking Focus Reward: 评估thinking是否聚焦正确答案
+Thinking Focus Reward: Evaluate whether thinking focuses on the correct answer
 
-Week 1实现：关键词匹配法
-- 统计正确答案关键词 vs 错误答案关键词
-- 聚焦正确答案 → 高分
-- 模糊不清/偏向错误答案 → 低分
-
-Week 2-3可选升级：API评估（更精确）
+Keyword matching approach:
+- Count correct answer keywords vs wrong answer keywords
+- Focused on correct answer -> high score
+- Ambiguous / biased toward wrong answer -> low score
 """
 
 import re
@@ -15,7 +13,7 @@ import torch
 
 
 def extract_keywords(text: str, min_length: int = 2) -> List[str]:
-    """提取关键词"""
+    """Extract keywords"""
     text = re.sub(r'[^\w\s]', ' ', text.lower())
     words = text.split()
     
@@ -25,42 +23,43 @@ def extract_keywords(text: str, min_length: int = 2) -> List[str]:
         'been', 'being', 'have', 'has', 'had', 'do', 'does', 'did', 'will',
         'would', 'should', 'could', 'may', 'might', 'must', 'can', 'this',
         'that', 'these', 'those', 'i', 'you', 'he', 'she', 'it', 'we', 'they',
-        '的', '了', '是', '在', '有', '和', '就', '不', '人', '都', '一',
-        '我', '他', '她', '们', '这', '那', '与', '或', '但', '而',
+        'me', 'him', 'her', 'us', 'them', 'my', 'your', 'his', 'its', 'our',
+        'their', 'what', 'which', 'who', 'whom', 'when', 'where', 'how', 'not',
+        'no', 'nor', 'so', 'if', 'then', 'than', 'too', 'very', 'just', 'about',
     }
     
     return [w for w in words if len(w) >= min_length and w not in stop_words]
 
 
 def extract_answer_text(option: str) -> str:
-    """从选项中提取答案文本（去除A. B.等前缀）"""
+    """Extract answer text from an option (strip A. B. etc. prefixes)"""
     return re.sub(r'^[A-E][\.．、]\s*', '', option.strip())
 
 
 def count_keywords_in_text(text: str, keywords: List[str]) -> int:
-    """统计关键词在文本中出现的次数"""
+    """Count occurrences of keywords in text"""
     text_lower = text.lower()
     return sum(text_lower.count(kw.lower()) for kw in keywords)
 
 
 def thinking_focus_reward(completions, question=None, options=None, solution=None, **kwargs):
     """
-    计算thinking聚焦度reward
+    Compute thinking focus reward
     
     Args:
-        completions: 生成的文本列表
-        question: 问题文本（可选）
-        options: 选项列表 ["A. ...", "B. ...", ...]
-        solution: 正确答案（字母，如"A"）
+        completions: list of generated texts
+        question: question text (optional)
+        options: option list ["A. ...", "B. ...", ...]
+        solution: correct answer (letter, e.g. "A")
         
     Returns:
         reward tensor
     """
     if not options or not solution:
-        # 缺少必要信息，返回中性分
+        # Missing required information, return neutral score
         return torch.tensor([0.5] * len(completions), dtype=torch.float32)
     
-    # 处理solution（可能是列表）
+    # Handle solution (may be a list)
     if isinstance(solution, list):
         if len(solution) == 0:
             return torch.tensor([0.5] * len(completions), dtype=torch.float32)
@@ -70,7 +69,7 @@ def thinking_focus_reward(completions, question=None, options=None, solution=Non
     
     solution_letter = solution_letter.strip().upper()
     
-    # 提取首字母
+    # Extract first letter
     if len(solution_letter) > 0 and solution_letter[0].isalpha():
         solution_letter = solution_letter[0]
     
@@ -79,7 +78,7 @@ def thinking_focus_reward(completions, question=None, options=None, solution=Non
     if solution_idx < 0 or solution_idx >= len(options):
         return torch.tensor([0.5] * len(completions), dtype=torch.float32)
     
-    # 提取正确和错误选项的关键词
+    # Extract keywords from correct and wrong options
     correct_option = options[solution_idx]
     wrong_options = [opt for i, opt in enumerate(options) if i != solution_idx]
     
@@ -92,7 +91,7 @@ def thinking_focus_reward(completions, question=None, options=None, solution=Non
         wrong_keywords.extend(extract_keywords(wrong_text))
     wrong_keywords = list(set(wrong_keywords))
     
-    # 移除重叠关键词
+    # Remove overlapping keywords
     overlap = set(correct_keywords) & set(wrong_keywords)
     correct_keywords = [kw for kw in correct_keywords if kw not in overlap]
     wrong_keywords = [kw for kw in wrong_keywords if kw not in overlap]
@@ -100,7 +99,7 @@ def thinking_focus_reward(completions, question=None, options=None, solution=Non
     rewards = []
     
     for completion in completions:
-        # 提取生成文本
+        # Extract generated text
         if isinstance(completion, str):
             generated_text = completion
         elif isinstance(completion, dict):
@@ -113,25 +112,25 @@ def thinking_focus_reward(completions, question=None, options=None, solution=Non
         else:
             generated_text = str(completion)
         
-        # 提取<think>标签内容
+        # Extract <think> tag content
         think_match = re.search(r'<think>(.*?)</think>', generated_text, re.DOTALL | re.IGNORECASE)
         thinking_text = think_match.group(1) if think_match else generated_text
         
-        # 统计关键词
+        # Count keywords
         correct_count = count_keywords_in_text(thinking_text, correct_keywords)
         wrong_count = count_keywords_in_text(thinking_text, wrong_keywords)
         
-        # 计算reward
+        # Compute reward
         if correct_count == 0 and wrong_count == 0:
-            reward = 0.3  # 通用推理，中性分
+            reward = 0.3  # Generic reasoning, neutral score
         elif correct_count > wrong_count * 1.5:
-            reward = 1.0  # 明显聚焦正确答案
+            reward = 1.0  # Clearly focused on correct answer
         elif correct_count > wrong_count:
-            reward = 0.7  # 略微偏向正确答案
+            reward = 0.7  # Slightly biased toward correct answer
         elif correct_count == wrong_count:
-            reward = 0.3  # 中性
+            reward = 0.3  # Neutral
         else:
-            reward = 0.0  # 偏向错误答案
+            reward = 0.0  # Biased toward wrong answer
         
         rewards.append(reward)
     
@@ -139,8 +138,8 @@ def thinking_focus_reward(completions, question=None, options=None, solution=Non
 
 
 if __name__ == "__main__":
-    # 测试
-    print("测试thinking_focus_reward...")
+    # Test
+    print("Testing thinking_focus_reward...")
     
     test_options = [
         "A. Romantic affection",
@@ -150,9 +149,9 @@ if __name__ == "__main__":
     test_solution = "A"
     
     test_completions = [
-        "<think>男士展现了romantic affection，他的眼神很gentle</think><answer>A</answer>",
-        "<think>可能是friendship，也可能是romantic关系</think><answer>A</answer>",
-        "<think>这是professional的互动</think><answer>A</answer>",
+        "<think>The man shows romantic affection, his gaze is very gentle</think><answer>A</answer>",
+        "<think>Could be friendship, or possibly a romantic relationship</think><answer>A</answer>",
+        "<think>This is a professional interaction</think><answer>A</answer>",
     ]
     
     rewards = thinking_focus_reward(
@@ -161,4 +160,4 @@ if __name__ == "__main__":
         solution=test_solution
     )
     
-    print(f"\nThinking聚焦度rewards: {rewards}")
+    print(f"\nThinking focus rewards: {rewards}")

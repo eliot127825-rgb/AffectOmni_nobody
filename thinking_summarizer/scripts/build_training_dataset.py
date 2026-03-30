@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-将API总结数据转换为训练数据集
-格式：instruction-input-output，适合微调Qwen模型
+Convert API summary data into training datasets.
+Format: instruction-input-output, suitable for fine-tuning LLMs.
 """
 
 import json
@@ -45,12 +45,12 @@ Requirements:
 7. Output must strictly follow the above format"""
 
 def format_summary_as_output(summary_text: str) -> str:
-    """将API返回的总结文本格式化为训练输出"""
-    # 直接使用API返回的完整总结文本
+    """Format the API-returned summary text as training output"""
+    # Directly use the full summary text returned by the API
     return summary_text.strip()
 
 def build_training_sample(item: Dict) -> Dict:
-    """构建单个训练样本"""
+    """Build a single training sample"""
     return {
         "instruction": INSTRUCTION_TEMPLATE,
         "input": item["original_thinking"],
@@ -75,30 +75,30 @@ def main():
     
     args = parser.parse_args()
     
-    # 设置随机种子
+    # Set random seed
     random.seed(args.seed)
     
-    # 创建输出目录
+    # Create output directory
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     
     print("=" * 80)
-    print("构建训练数据集")
+    print("Build Training Dataset")
     print("=" * 80)
-    print(f"输入文件: {args.input_file}")
-    print(f"输出路径: {args.output_dir}")
-    print(f"训练集比例: {args.train_ratio}")
+    print(f"Input file: {args.input_file}")
+    print(f"Output path: {args.output_dir}")
+    print(f"Training ratio: {args.train_ratio}")
     print("=" * 80)
     
-    # 加载API总结数据
-    print("\n加载API总结数据...")
+    # Load API summary data
+    print("\nLoading API summary data...")
     with open(args.input_file, 'r', encoding='utf-8') as f:
         summaries = json.load(f)
     
-    print(f"共加载 {len(summaries)} 个总结样本")
+    print(f"Loaded {len(summaries)} summary samples")
     
-    # 构建训练样本
-    print("\n构建训练样本...")
+    # Build training samples
+    print("\nBuilding training samples...")
     training_samples = []
     
     for item in summaries:
@@ -106,73 +106,73 @@ def main():
             sample = build_training_sample(item)
             training_samples.append(sample)
         except Exception as e:
-            print(f"⚠️  处理 {item.get('video_id', 'unknown')} 时出错: {str(e)}")
+            print(f"Error processing {item.get('video_id', 'unknown')}: {str(e)}")
             continue
     
-    print(f"成功构建 {len(training_samples)} 个训练样本")
+    print(f"Successfully built {len(training_samples)} training samples")
     
-    # 随机打乱
+    # Random shuffle
     random.shuffle(training_samples)
     
-    # 划分训练集和验证集
+    # Split into training and validation sets
     split_idx = int(len(training_samples) * args.train_ratio)
     train_samples = training_samples[:split_idx]
     val_samples = training_samples[split_idx:]
     
-    print(f"\n数据集划分:")
-    print(f"  训练集: {len(train_samples)} 样本")
-    print(f"  验证集: {len(val_samples)} 样本")
+    print(f"\nDataset split:")
+    print(f"  Training: {len(train_samples)} samples")
+    print(f"  Validation: {len(val_samples)} samples")
     
-    # 保存训练集
+    # Save training set
     train_file = output_dir / 'train.json'
     with open(train_file, 'w', encoding='utf-8') as f:
         json.dump(train_samples, f, ensure_ascii=False, indent=2)
-    print(f"\n✅ 训练集已保存: {train_file}")
+    print(f"\nTraining set saved: {train_file}")
     
-    # 保存验证集
+    # Save validation set
     val_file = output_dir / 'val.json'
     with open(val_file, 'w', encoding='utf-8') as f:
         json.dump(val_samples, f, ensure_ascii=False, indent=2)
-    print(f"✅ 验证集已保存: {val_file}")
+    print(f"Validation set saved: {val_file}")
     
-    # 统计信息
+    # Statistics
     print("\n" + "=" * 80)
-    print("数据集统计")
+    print("Dataset Statistics")
     print("=" * 80)
     
-    # 统计数据来源
+    # Count data sources
     sources = {}
     for sample in training_samples:
         source = sample['metadata']['source']
         sources[source] = sources.get(source, 0) + 1
     
-    print("\n数据来源分布:")
+    print("\nData source distribution:")
     for source, count in sorted(sources.items(), key=lambda x: x[1], reverse=True):
         print(f"  {source}: {count} ({count/len(training_samples)*100:.1f}%)")
     
-    # 统计输入输出长度
+    # Compute input/output length statistics
     input_lengths = [len(s['input']) for s in training_samples]
     output_lengths = [len(s['output']) for s in training_samples]
     
-    print(f"\n输入长度统计:")
-    print(f"  平均: {sum(input_lengths)/len(input_lengths):.0f} 字符")
-    print(f"  最短: {min(input_lengths)} 字符")
-    print(f"  最长: {max(input_lengths)} 字符")
+    print(f"\nInput length statistics:")
+    print(f"  Average: {sum(input_lengths)/len(input_lengths):.0f} chars")
+    print(f"  Shortest: {min(input_lengths)} chars")
+    print(f"  Longest: {max(input_lengths)} chars")
     
-    print(f"\n输出长度统计:")
-    print(f"  平均: {sum(output_lengths)/len(output_lengths):.0f} 字符")
-    print(f"  最短: {min(output_lengths)} 字符")
-    print(f"  最长: {max(output_lengths)} 字符")
+    print(f"\nOutput length statistics:")
+    print(f"  Average: {sum(output_lengths)/len(output_lengths):.0f} chars")
+    print(f"  Shortest: {min(output_lengths)} chars")
+    print(f"  Longest: {max(output_lengths)} chars")
     
     print("\n" + "=" * 80)
-    print("✅ 数据集构建完成！")
+    print("Dataset construction complete!")
     print("=" * 80)
     
-    # 保存一个示例
+    # Save an example
     example_file = output_dir / 'example.json'
     with open(example_file, 'w', encoding='utf-8') as f:
         json.dump(train_samples[0], f, ensure_ascii=False, indent=2)
-    print(f"\n示例样本已保存: {example_file}")
+    print(f"\nExample sample saved: {example_file}")
 
 if __name__ == '__main__':
     main()

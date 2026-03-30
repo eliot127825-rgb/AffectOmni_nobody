@@ -18,7 +18,7 @@ fi
 RUN_NAME="stage2"
 export LOG_PATH="./debug_log_$RUN_NAME.txt"
 
-# 添加src目录到PYTHONPATH，使open_r1模块可以被导入
+# Add src to PYTHONPATH so the open_r1 module can be imported
 export PYTHONPATH="${PYTHONPATH}:$(pwd)/src"
 
 export NCCL_SOCKET_TIMEOUT=3600

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-使用LoRA微调Qwen2.5-3B-Instruct进行thinking总结
+LoRA fine-tuning for thinking summarization.
 """
 
 import os
@@ -54,29 +54,29 @@ class LoraArguments:
     )
 
 def load_dataset_from_json(file_path: str) -> Dataset:
-    """从JSON文件加载数据集"""
+    """Load dataset from JSON file"""
     with open(file_path, 'r', encoding='utf-8') as f:
         data = json.load(f)
     return Dataset.from_list(data)
 
 def preprocess_function(examples: Dict, tokenizer, max_length: int) -> Dict:
-    """预处理数据：构建prompt并tokenize"""
+    """Preprocess data: build prompts and tokenize"""
     
-    # 构建完整的prompt
+    # Build complete prompts
     prompts = []
     for instruction, input_text, output_text in zip(
         examples['instruction'], 
         examples['input'], 
         examples['output']
     ):
-        # Qwen2.5格式的对话模板
+        # Qwen2.5 chat template format
         messages = [
             {"role": "system", "content": instruction},
             {"role": "user", "content": input_text},
             {"role": "assistant", "content": output_text}
         ]
         
-        # 使用tokenizer的chat_template
+        # Use the tokenizer's chat_template
         prompt = tokenizer.apply_chat_template(
             messages,
             tokenize=False,
@@ -93,7 +93,7 @@ def preprocess_function(examples: Dict, tokenizer, max_length: int) -> Dict:
         return_tensors=None
     )
     
-    # 设置labels（用于计算loss）
+    # Set labels (for loss computation)
     model_inputs["labels"] = model_inputs["input_ids"].copy()
     
     return model_inputs
@@ -101,12 +101,12 @@ def preprocess_function(examples: Dict, tokenizer, max_length: int) -> Dict:
 def main():
     parser = argparse.ArgumentParser()
     
-    # 模型参数
+    # Model parameters
     parser.add_argument('--model-path', type=str, 
-                        default='${PROJECT_ROOT}/Qwen2.5-3B-Instruct',
+                        default=os.environ.get('BASE_MODEL_PATH', './Qwen2.5-3B-Instruct'),
                         help='Path to base model')
     
-    # 数据参数
+    # Data parameters
     parser.add_argument('--train-file', type=str,
                         default='./data/training_dataset/train.json',
                         help='Training data file')
@@ -116,7 +116,7 @@ def main():
     parser.add_argument('--max-length', type=int, default=2048,
                         help='Maximum sequence length')
     
-    # LoRA参数
+    # LoRA parameters
     parser.add_argument('--lora-rank', type=int, default=32,
                         help='LoRA rank')
     parser.add_argument('--lora-alpha', type=int, default=64,
@@ -124,7 +124,7 @@ def main():
     parser.add_argument('--lora-dropout', type=float, default=0.05,
                         help='LoRA dropout')
     
-    # 训练参数
+    # Training parameters
     parser.add_argument('--output-dir', type=str,
                         default='./outputs/thinking_summarizer',
                         help='Output directory')
@@ -146,17 +146,17 @@ def main():
     args = parser.parse_args()
     
     print("=" * 80)
-    print("Thinking Summarizer 训练配置")
+    print("Thinking Summarizer Training Config")
     print("=" * 80)
-    print(f"基座模型: {args.model_path}")
-    print(f"训练数据: {args.train_file}")
-    print(f"验证数据: {args.val_file}")
-    print(f"输出目录: {args.output_dir}")
-    print(f"\nLoRA配置:")
+    print(f"Base model: {args.model_path}")
+    print(f"Training data: {args.train_file}")
+    print(f"Validation data: {args.val_file}")
+    print(f"Output dir: {args.output_dir}")
+    print(f"\nLoRA config:")
     print(f"  Rank: {args.lora_rank}")
     print(f"  Alpha: {args.lora_alpha}")
     print(f"  Dropout: {args.lora_dropout}")
-    print(f"\n训练配置:")
+    print(f"\nTraining config:")
     print(f"  Epochs: {args.num_epochs}")
     print(f"  Batch Size: {args.batch_size}")
     print(f"  Gradient Accumulation: {args.gradient_accumulation}")
@@ -164,28 +164,28 @@ def main():
     print(f"  Learning Rate: {args.learning_rate}")
     print("=" * 80)
     
-    # 加载tokenizer
-    print("\n加载tokenizer...")
+    # Load tokenizer
+    print("\nLoading tokenizer...")
     tokenizer = AutoTokenizer.from_pretrained(
         args.model_path,
         trust_remote_code=True,
         padding_side='right'
     )
     
-    # 确保有pad_token
+    # Ensure pad_token exists
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
     
-    # 加载模型
-    print("加载模型...")
+    # Load model
+    print("Loading model...")
     model = AutoModelForCausalLM.from_pretrained(
         args.model_path,
         torch_dtype=torch.bfloat16,
         trust_remote_code=True,
     )
     
-    # 配置LoRA
-    print("配置LoRA...")
+    # Configure LoRA
+    print("Configuring LoRA...")
     lora_config = LoraConfig(
         task_type=TaskType.CAUSAL_LM,
         r=args.lora_rank,
@@ -199,16 +199,16 @@ def main():
     model = get_peft_model(model, lora_config)
     model.print_trainable_parameters()
     
-    # 加载数据集
-    print("\n加载数据集...")
+    # Load datasets
+    print("\nLoading datasets...")
     train_dataset = load_dataset_from_json(args.train_file)
     val_dataset = load_dataset_from_json(args.val_file)
     
-    print(f"训练样本: {len(train_dataset)}")
-    print(f"验证样本: {len(val_dataset)}")
+    print(f"Training samples: {len(train_dataset)}")
+    print(f"Validation samples: {len(val_dataset)}")
     
-    # 预处理数据
-    print("\n预处理数据...")
+    # Preprocess data
+    print("\nPreprocessing data...")
     train_dataset = train_dataset.map(
         lambda x: preprocess_function(x, tokenizer, args.max_length),
         batched=True,
@@ -223,7 +223,7 @@ def main():
         desc="Processing validation data"
     )
     
-    # 训练参数
+    # Training arguments
     training_args = TrainingArguments(
         output_dir=args.output_dir,
         num_train_epochs=args.num_epochs,
@@ -233,15 +233,15 @@ def main():
         learning_rate=args.learning_rate,
         warmup_ratio=args.warmup_ratio,
         logging_steps=args.logging_steps,
-        save_strategy="no",  # 训练过程中不保存checkpoint
-        eval_strategy="steps",  # 保持评估以监控训练
+        save_strategy="no",  # Don't save checkpoints during training
+        eval_strategy="steps",  # Keep evaluation for training monitoring
         eval_steps=args.save_steps,
         bf16=True,
-        gradient_checkpointing=False,  # 关闭以避免embedding梯度问题，80GB显存足够
+        gradient_checkpointing=False,  # Disabled to avoid embedding gradient issues; sufficient VRAM
         dataloader_num_workers=4,
         remove_unused_columns=False,
         report_to="none",
-        # 多卡训练配置
+        # Multi-GPU training config
         ddp_find_unused_parameters=False,
         ddp_backend="nccl",
     )
@@ -253,7 +253,7 @@ def main():
         padding=True,
     )
     
-    # 创建Trainer
+    # Create Trainer
     trainer = Trainer(
         model=model,
         args=training_args,
@@ -262,25 +262,25 @@ def main():
         data_collator=data_collator,
     )
     
-    # 开始训练
+    # Start training
     print("\n" + "=" * 80)
-    print("开始训练...")
+    print("Starting training...")
     print("=" * 80)
     
     trainer.train()
     
-    # 保存最终模型
-    print("\n保存模型...")
+    # Save final model
+    print("\nSaving model...")
     final_output_dir = Path(args.output_dir) / "final_model"
     trainer.save_model(final_output_dir)
     tokenizer.save_pretrained(final_output_dir)
     
-    print(f"\n✅ 训练完成！模型已保存到: {final_output_dir}")
+    print(f"\nTraining complete! Model saved to: {final_output_dir}")
     
-    # 评估
-    print("\n最终评估...")
+    # Evaluation
+    print("\nFinal evaluation...")
     eval_results = trainer.evaluate()
-    print(f"验证集Loss: {eval_results['eval_loss']:.4f}")
+    print(f"Validation Loss: {eval_results['eval_loss']:.4f}")
 
 if __name__ == '__main__':
     main()

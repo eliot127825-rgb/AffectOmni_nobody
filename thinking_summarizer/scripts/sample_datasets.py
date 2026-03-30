@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-从多个数据集中采样生成统一格式的数据集用于thinking生成
+Sample from multiple datasets and generate a unified format dataset for thinking generation.
 """
 
 import json
@@ -10,13 +10,13 @@ from pathlib import Path
 from typing import List, Dict
 
 def load_intentbench(data_path: str) -> List[Dict]:
-    """加载IntentBench数据集"""
+    """Load IntentBench dataset"""
     with open(data_path, 'r', encoding='utf-8') as f:
         data = json.load(f)
     
     samples = []
     for item in data:
-        # IntentBench格式转换
+        # IntentBench format conversion
         question = item['problem']
         if item['problem_type'] == 'multiple choice':
             question = question + " Options:\n"
@@ -25,7 +25,7 @@ def load_intentbench(data_path: str) -> List[Dict]:
         
         samples.append({
             'video_id': item['video'].replace('.mp4', '').replace('_trimmed-out', ''),
-            'video_path': f"${PROJECT_ROOT}/data/IntentBench/videos/{item['video']}",
+            'video_path': os.path.join(os.environ.get('DATA_ROOT', './data'), f"IntentBench/videos/{item['video']}"),
             'question': question,
             'problem_type': item['problem_type'],
             'data_type': item['data_type'],
@@ -39,7 +39,7 @@ def load_intentbench(data_path: str) -> List[Dict]:
     return samples
 
 def load_daily_omni(data_path: str) -> List[Dict]:
-    """加载Daily-Omni数据集"""
+    """Load Daily-Omni dataset"""
     with open(data_path, 'r', encoding='utf-8') as f:
         data = json.load(f)
     
@@ -49,7 +49,7 @@ def load_daily_omni(data_path: str) -> List[Dict]:
         question = item['Question']
         choices = item.get('Choice', [])
         
-        # 构造完整问题
+        # Build complete question
         if choices:
             question = question + " Options:\n"
             for choice in choices:
@@ -57,7 +57,7 @@ def load_daily_omni(data_path: str) -> List[Dict]:
         
         samples.append({
             'video_id': video_id,
-            'video_path': f"${DATA_ROOT}/HoEvalDate/Videos/{video_id}/{video_id}_video.mp4",
+            'video_path': os.path.join(os.environ.get('DATA_ROOT', './data'), f"Videos/{video_id}/{video_id}_video.mp4"),
             'question': question,
             'problem_type': 'multiple choice',
             'data_type': 'video',
@@ -70,10 +70,10 @@ def load_daily_omni(data_path: str) -> List[Dict]:
     return samples
 
 def load_intent_train(base_path: str) -> List[Dict]:
-    """加载IntentTrain数据集"""
+    """Load IntentTrain dataset"""
     samples = []
     
-    # 加载emer_rewrite.json
+    # Load emer_rewrite.json
     emer_path = Path(base_path) / 'emer_rewrite.json'
     if emer_path.exists():
         with open(emer_path, 'r', encoding='utf-8') as f:
@@ -98,7 +98,7 @@ def load_intent_train(base_path: str) -> List[Dict]:
                 }
             })
     
-    # 加载social_iq_v2_rewrite.json
+    # Load social_iq_v2_rewrite.json
     social_path = Path(base_path) / 'social_iq_v2_rewrite.json'
     if social_path.exists():
         with open(social_path, 'r', encoding='utf-8') as f:
@@ -113,7 +113,7 @@ def load_intent_train(base_path: str) -> List[Dict]:
             
             samples.append({
                 'video_id': item['path'].replace('/', '_').replace('.mp4', ''),
-                'video_path': f"${PROJECT_ROOT}/data/IntentTrain/videos/{item['path']}",
+                'video_path': os.path.join(os.environ.get('DATA_ROOT', './data'), f"IntentTrain/videos/{item['path']}"),
                 'question': question,
                 'problem_type': item['problem_type'],
                 'data_type': item['data_type'],
@@ -126,7 +126,7 @@ def load_intent_train(base_path: str) -> List[Dict]:
     return samples
 
 def sample_data(all_samples: Dict[str, List[Dict]], sample_counts: Dict[str, int], seed: int = 42) -> List[Dict]:
-    """从各数据集采样"""
+    """Sample from each dataset"""
     random.seed(seed)
     
     sampled = []
@@ -136,23 +136,23 @@ def sample_data(all_samples: Dict[str, List[Dict]], sample_counts: Dict[str, int
             if len(dataset_samples) >= count:
                 sampled.extend(random.sample(dataset_samples, count))
             else:
-                print(f"⚠️  {dataset_name}: 需要{count}个样本，但只有{len(dataset_samples)}个，全部使用")
+                print(f"  {dataset_name}: requested {count} samples, but only {len(dataset_samples)} available, using all")
                 sampled.extend(dataset_samples)
     
-    # 打乱顺序
+    # Shuffle the order
     random.shuffle(sampled)
     return sampled
 
 def main():
     parser = argparse.ArgumentParser(description='Sample data from multiple datasets')
     parser.add_argument('--intentbench-path', type=str, 
-                        default='${PROJECT_ROOT}/data/IntentBench/qa.json',
+                        default='./data/IntentBench/qa.json',
                         help='Path to IntentBench qa.json')
     parser.add_argument('--daily-path', type=str,
-                        default='${DATA_ROOT}/HoEvalDate/qa.json',
+                        default='./data/DailyOmni/qa.json',
                         help='Path to Daily-Omni qa.json')
     parser.add_argument('--intenttrain-path', type=str,
-                        default='${PROJECT_ROOT}/data/IntentTrain',
+                        default='./data/IntentTrain',
                         help='Path to IntentTrain directory')
     parser.add_argument('--output-path', type=str, required=True,
                         help='Output path for sampled data')
@@ -170,46 +170,46 @@ def main():
     args = parser.parse_args()
     
     print("=" * 80)
-    print("多数据集采样工具")
+    print("Multi-Dataset Sampling Tool")
     print("=" * 80)
     
-    # 加载数据集
+    # Load datasets
     all_samples = {}
     
-    print("\n加载IntentBench...")
+    print("\nLoading IntentBench...")
     intentbench_samples = load_intentbench(args.intentbench_path)
     all_samples['IntentBench'] = intentbench_samples
-    print(f"  ✓ 加载 {len(intentbench_samples)} 个样本")
+    print(f"  Loaded {len(intentbench_samples)} samples")
     
-    print("\n加载Daily-Omni...")
+    print("\nLoading Daily-Omni...")
     daily_samples = load_daily_omni(args.daily_path)
     all_samples['Daily'] = daily_samples
-    print(f"  ✓ 加载 {len(daily_samples)} 个样本")
+    print(f"  Loaded {len(daily_samples)} samples")
     
-    print("\n加载IntentTrain...")
+    print("\nLoading IntentTrain...")
     intenttrain_samples = load_intent_train(args.intenttrain_path)
     all_samples['IntentTrain'] = intenttrain_samples
-    print(f"  ✓ 加载 {len(intenttrain_samples)} 个样本")
+    print(f"  Loaded {len(intenttrain_samples)} samples")
     
-    # 采样或全量合并
+    # Sample or merge all
     print("\n" + "=" * 80)
     if args.use_all:
-        print("全量数据合并模式 (--use-all)")
+        print("Full data merge mode (--use-all)")
         print("=" * 80)
-        # 直接合并所有数据
+        # Directly merge all data
         sampled_data = []
         for dataset_name, dataset_samples in all_samples.items():
-            print(f"  {dataset_name}: {len(dataset_samples)} 样本")
+            print(f"  {dataset_name}: {len(dataset_samples)} samples")
             sampled_data.extend(dataset_samples)
-        # 打乱顺序
+        # Shuffle order
         random.seed(args.seed)
         random.shuffle(sampled_data)
     else:
-        print("采样配置:")
-        print(f"  IntentBench: {args.intentbench_count} 样本")
-        print(f"  Daily-Omni:  {args.daily_count} 样本")
-        print(f"  IntentTrain: {args.intenttrain_count} 样本")
-        print(f"  随机种子:    {args.seed}")
+        print("Sampling config:")
+        print(f"  IntentBench: {args.intentbench_count} samples")
+        print(f"  Daily-Omni:  {args.daily_count} samples")
+        print(f"  IntentTrain: {args.intenttrain_count} samples")
+        print(f"  Random seed: {args.seed}")
         print("=" * 80)
         
         sample_counts = {
@@ -220,25 +220,25 @@ def main():
         
         sampled_data = sample_data(all_samples, sample_counts, args.seed)
     
-    # 保存
+    # Save
     output_path = Path(args.output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     
     with open(output_path, 'w', encoding='utf-8') as f:
         json.dump(sampled_data, f, indent=2, ensure_ascii=False)
     
-    print(f"\n✅ 完成！共采样 {len(sampled_data)} 个样本")
-    print(f"输出文件: {output_path}")
+    print(f"\nDone! Sampled {len(sampled_data)} samples total")
+    print(f"Output file: {output_path}")
     
-    # 统计
-    print("\n数据来源统计:")
+    # Statistics
+    print("\nData source statistics:")
     source_counts = {}
     for item in sampled_data:
         source = item['metadata']['source']
         source_counts[source] = source_counts.get(source, 0) + 1
     
     for source, count in sorted(source_counts.items()):
-        print(f"  {source}: {count} 样本")
+        print(f"  {source}: {count} samples")
 
 if __name__ == '__main__':
     main()

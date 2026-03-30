@@ -1,5 +1,5 @@
-# Rollout生成的数据配置
-# 使用Stage 1的训练数据来生成rollout
+# Data config for rollout generation
+# Use Stage 1 training data to generate rollouts
 
 datasets:
   - json_path: data_config/emer_rewrite.json

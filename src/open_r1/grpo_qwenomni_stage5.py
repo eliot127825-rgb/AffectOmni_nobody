@@ -33,16 +33,16 @@ from PIL import Image
 from torch.utils.data import Dataset
 from transformers import Qwen2VLForConditionalGeneration
 
-# from math_verify import parse, verify  # 注释掉：math_verify模块不存在，且在视频多模态任务中不需要
-# Stage 5专用：使用支持对比打分的trainer
+# from math_verify import parse, verify  # Commented out: math_verify module is not available and not needed for video multimodal tasks
+# Stage 5 specific: uses a trainer that supports comparative scoring
 from open_r1.trainer.grpo_trainer_stage5 import VLMGRPOTrainer
 from open_r1.trainer import GRPOConfig
 from open_r1.vlm_modules import *
-# Stage 5版本：使用副本避免影响Stage 4训练
+# Stage 5 version: uses separate copies to avoid affecting Stage 4 training
 from open_r1.vlm_modules.people_focus_reward_stage5 import people_focus_reward as people_focus_reward_stage5
 from open_r1.vlm_modules.temporal_order_reward_stage5 import temporal_order_reward as temporal_order_reward_stage5
 from open_r1.vlm_modules.combined_reward_stage5 import people_focus_reward_combined as people_focus_reward_combined_stage5, temporal_order_reward_combined as temporal_order_reward_combined_stage5
-# Stage 5新增reward函数
+# Additional reward functions added in Stage 5
 from open_r1.vlm_modules.outcome_reward import outcome_reward
 from open_r1.vlm_modules.thinking_focus_reward import thinking_focus_reward
 from trl import ModelConfig, ScriptArguments, TrlParser, get_peft_config
@@ -58,7 +58,7 @@ from decord import VideoReader, cpu, AudioReader
 import numpy as np
 
 # ----------------------- Fix the flash attention bug in the current version of transformers -----------------------
-# 注释掉：这些是针对特定transformers版本的flash attention修复，当前版本不兼容
+# Commented out: these flash attention fixes target a specific transformers version and are incompatible with the current one
 # from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLVisionFlashAttention2, apply_rotary_pos_emb_flashatt, flash_attn_varlen_func
 import torch
 from typing import Tuple
@@ -82,7 +82,7 @@ logger = logging.getLogger(__name__)
 
 
 
-# 注释掉flash attention修复代码，因为transformers版本不兼容
+# Flash attention fix code commented out due to transformers version incompatibility
 # def custom_forward(
 #         self,
 #         hidden_states: torch.Tensor,
@@ -424,7 +424,7 @@ class LazySupervisedDataset(Dataset):
 
 
 def get_vlm_module(model_name_or_path):
-    # 先检查路径名称
+    # First check the path name
     if "qwen" in model_name_or_path.lower() and "omni" in model_name_or_path.lower():
         return QwenOmniModule
     elif "internvl" in model_name_or_path.lower():
@@ -434,7 +434,7 @@ def get_vlm_module(model_name_or_path):
     elif "qwen" in model_name_or_path.lower() and "vl" in model_name_or_path.lower():
         return Qwen2VLModule
     else:
-        # 尝试读取 config.json 判断模型类型
+        # Try reading config.json to determine model type
         import os
         import json
         config_path = os.path.join(model_name_or_path, "config.json")
@@ -442,7 +442,7 @@ def get_vlm_module(model_name_or_path):
             with open(config_path, 'r') as f:
                 config = json.load(f)
             model_type = config.get("model_type", "")
-            # HumanOmniV2 使用 qwen2_5_omni_thinker
+            # Models using qwen2_5_omni_thinker architecture
             if "qwen2_5_omni" in model_type or "qwen2_omni" in model_type:
                 return QwenOmniModule
         raise ValueError(f"Unsupported model: {model_name_or_path}")
@@ -453,11 +453,11 @@ def main(script_args, training_args, model_args):
     print("using vlm module:", vlm_module_cls.__name__)
 
     # Load the reward functions
-    # 使用合并版的reward函数，一次API调用同时评估人物关注度和时序分析
+    # Use combined reward functions to evaluate people focus and temporal analysis in a single API call
     use_combined_reward = os.environ.get("USE_COMBINED_REWARD", "true").lower() == "true"
     
     if use_combined_reward:
-        print("✅ 使用合并版API评估（人物关注度 + 时序分析，节省50% API调用）")
+        print("Using combined API evaluation (people focus + temporal analysis, saving 50% API calls)")
         reward_funcs_registry = {
             "accuracy": vlm_module_cls.accuracy_reward,
             "format": vlm_module_cls.format_reward,
@@ -465,12 +465,12 @@ def main(script_args, training_args, model_args):
             "context": vlm_module_cls.patial_context_reward,
             "people_focus": people_focus_reward_combined_stage5,
             "temporal_order": temporal_order_reward_combined_stage5,
-            # Stage 5新增
+            # Added in Stage 5
             "outcome": outcome_reward,
             "thinking_focus": thinking_focus_reward
         }
     else:
-        print("⚠️  使用独立API评估（每个维度单独调用）")
+        print("Using independent API evaluation (separate call for each dimension)")
         reward_funcs_registry = {
             "accuracy": vlm_module_cls.accuracy_reward,
             "format": vlm_module_cls.format_reward,
@@ -478,7 +478,7 @@ def main(script_args, training_args, model_args):
             "context": vlm_module_cls.patial_context_reward,
             "people_focus": people_focus_reward_stage5,
             "temporal_order": temporal_order_reward_stage5,
-            # Stage 5新增
+            # Added in Stage 5
             "outcome": outcome_reward,
             "thinking_focus": thinking_focus_reward
         }

@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 """
-诊断脚本：测试 DeepSpeed Zero3 环境下 Qwen2.5-Omni 的生成问题
-运行方式：
-  单卡测试（无 DeepSpeed）:
+Diagnostic script: Test generation issues under DeepSpeed Zero3 environment
+Usage:
+  Single-GPU test (no DeepSpeed):
     python scripts/debug_zero3_generate.py --mode single
   
-  多卡测试（使用 DeepSpeed Zero3）:
+  Multi-GPU test (using DeepSpeed Zero3):
     torchrun --nproc_per_node 2 scripts/debug_zero3_generate.py --mode zero3
 """
 
@@ -18,15 +18,15 @@ import torch
 from transformers import Qwen2_5OmniThinkerForConditionalGeneration, Qwen2_5OmniProcessor
 
 def test_single_gpu():
-    """单卡测试，不使用 DeepSpeed"""
+    """Single-GPU test, without DeepSpeed"""
     print("=" * 60)
-    print("测试模式: 单卡（无 DeepSpeed）")
+    print("Test mode: Single-GPU (no DeepSpeed)")
     print("=" * 60)
     
     model_path = "${PROJECT_ROOT}/models/HumanOmniV2"
     
-    # 加载模型和处理器
-    print("加载模型...")
+    # Load model and processor
+    print("Loading model...")
     model = Qwen2_5OmniThinkerForConditionalGeneration.from_pretrained(
         model_path,
         torch_dtype=torch.bfloat16,
@@ -35,8 +35,8 @@ def test_single_gpu():
     )
     processor = Qwen2_5OmniProcessor.from_pretrained(model_path, trust_remote_code=True)
     
-    # 简单文本测试
-    print("\n--- 简单文本测试 ---")
+    # Simple text test
+    print("\n--- Simple text test ---")
     text = "<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n<|im_start|>user\nHello, who are you?<|im_end|>\n<|im_start|>assistant\n"
     
     inputs = processor(text=[text], return_tensors="pt", padding=True)
@@ -45,7 +45,7 @@ def test_single_gpu():
     print(f"Input keys: {list(inputs.keys())}")
     print(f"Input IDs shape: {inputs['input_ids'].shape}")
     
-    # 生成
+    # Generate
     with torch.no_grad():
         outputs = model.generate(
             **inputs,
@@ -55,27 +55,27 @@ def test_single_gpu():
         )
     
     result = processor.batch_decode(outputs, skip_special_tokens=True)[0]
-    print(f"\n生成结果:\n{result}")
+    print(f"\nGeneration result:\n{result}")
     
-    # 检查是否为乱码
+    # Check for garbled output
     if "system" * 3 in result.lower():
-        print("\n⚠️  警告: 检测到疑似乱码输出!")
+        print("\n⚠️  Warning: Suspected garbled output detected!")
     else:
-        print("\n✅ 输出看起来正常")
+        print("\n✅ Output looks normal")
     
     return result
 
 def test_zero3():
-    """使用 DeepSpeed Zero3 测试"""
+    """Test with DeepSpeed Zero3"""
     import deepspeed
     from accelerate import Accelerator
     from accelerate.utils import DeepSpeedPlugin
     
     print("=" * 60)
-    print("测试模式: DeepSpeed Zero3")
+    print("Test mode: DeepSpeed Zero3")
     print("=" * 60)
     
-    # DeepSpeed 配置
+    # DeepSpeed config
     ds_config = {
         "bf16": {"enabled": True},
         "zero_optimization": {
@@ -96,8 +96,8 @@ def test_zero3():
     
     model_path = "${PROJECT_ROOT}/models/HumanOmniV2"
     
-    # 加载模型
-    print(f"[Rank {accelerator.process_index}] 加载模型...")
+    # Load model
+    print(f"[Rank {accelerator.process_index}] Loading model...")
     with accelerator.main_process_first():
         model = Qwen2_5OmniThinkerForConditionalGeneration.from_pretrained(
             model_path,
@@ -106,12 +106,12 @@ def test_zero3():
         )
         processor = Qwen2_5OmniProcessor.from_pretrained(model_path, trust_remote_code=True)
     
-    # 准备模型
+    # Prepare model
     model = accelerator.prepare_model(model)
     
-    # 简单文本测试
+    # Simple text test
     if accelerator.is_main_process:
-        print("\n--- 简单文本测试 (Zero3) ---")
+        print("\n--- Simple text test (Zero3) ---")
     
     text = "<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n<|im_start|>user\nHello, who are you?<|im_end|>\n<|im_start|>assistant\n"
     
@@ -122,9 +122,9 @@ def test_zero3():
         print(f"Input keys: {list(inputs.keys())}")
         print(f"Input IDs shape: {inputs['input_ids'].shape}")
     
-    # 测试1: 使用 GatheredParameters
+    # Test 1: Using GatheredParameters
     if accelerator.is_main_process:
-        print("\n--- 测试1: 使用 GatheredParameters ---")
+        print("\n--- Test 1: Using GatheredParameters ---")
     
     with torch.no_grad():
         with deepspeed.zero.GatheredParameters(model.parameters()):
@@ -138,16 +138,16 @@ def test_zero3():
     
     if accelerator.is_main_process:
         result = processor.batch_decode(outputs, skip_special_tokens=True)[0]
-        print(f"\n生成结果 (GatheredParameters):\n{result[:500]}")
+        print(f"\nGeneration result (GatheredParameters):\n{result[:500]}")
         
         if "system" * 3 in result.lower():
-            print("\n⚠️  警告: 检测到疑似乱码输出!")
+            print("\n⚠️  Warning: Suspected garbled output detected!")
         else:
-            print("\n✅ 输出看起来正常")
+            print("\n✅ Output looks normal")
     
-    # 测试2: 不使用 GatheredParameters（直接 unwrap）
+    # Test 2: Without GatheredParameters (direct unwrap)
     if accelerator.is_main_process:
-        print("\n--- 测试2: 不使用 GatheredParameters ---")
+        print("\n--- Test 2: Without GatheredParameters ---")
     
     with torch.no_grad():
         unwrapped_model = accelerator.unwrap_model(model)
@@ -160,21 +160,21 @@ def test_zero3():
             )
             if accelerator.is_main_process:
                 result2 = processor.batch_decode(outputs2, skip_special_tokens=True)[0]
-                print(f"\n生成结果 (直接 unwrap):\n{result2[:500]}")
+                print(f"\nGeneration result (direct unwrap):\n{result2[:500]}")
         except Exception as e:
             if accelerator.is_main_process:
-                print(f"\n❌ 错误: {e}")
+                print(f"\n❌ Error: {e}")
 
 def test_gradient_checkpointing():
-    """测试 gradient checkpointing 对生成的影响"""
+    """Test the impact of gradient checkpointing on generation"""
     print("=" * 60)
-    print("测试模式: Gradient Checkpointing 影响")
+    print("Test mode: Gradient Checkpointing Impact")
     print("=" * 60)
     
     model_path = "${PROJECT_ROOT}/models/HumanOmniV2"
     
-    # 加载模型
-    print("加载模型...")
+    # Load model
+    print("Loading model...")
     model = Qwen2_5OmniThinkerForConditionalGeneration.from_pretrained(
         model_path,
         torch_dtype=torch.bfloat16,
@@ -187,41 +187,41 @@ def test_gradient_checkpointing():
     inputs = processor(text=[text], return_tensors="pt", padding=True)
     inputs = {k: v.to(model.device) if hasattr(v, 'to') else v for k, v in inputs.items()}
     
-    # 测试1: 不启用 gradient checkpointing
-    print("\n--- 测试1: 不启用 gradient checkpointing ---")
+    # Test 1: Without gradient checkpointing
+    print("\n--- Test 1: Without gradient checkpointing ---")
     print(f"model.config.use_cache: {model.config.use_cache}")
     
     with torch.no_grad():
         outputs1 = model.generate(**inputs, max_new_tokens=50, do_sample=True, temperature=0.7)
     result1 = processor.batch_decode(outputs1, skip_special_tokens=True)[0]
-    print(f"结果: {result1[:300]}")
+    print(f"Result: {result1[:300]}")
     
-    # 测试2: 启用 gradient checkpointing
-    print("\n--- 测试2: 启用 gradient checkpointing ---")
+    # Test 2: With gradient checkpointing enabled
+    print("\n--- Test 2: With gradient checkpointing enabled ---")
     model.gradient_checkpointing_enable()
     print(f"model.config.use_cache after gradient_checkpointing_enable: {model.config.use_cache}")
     
     with torch.no_grad():
         outputs2 = model.generate(**inputs, max_new_tokens=50, do_sample=True, temperature=0.7)
     result2 = processor.batch_decode(outputs2, skip_special_tokens=True)[0]
-    print(f"结果: {result2[:300]}")
+    print(f"Result: {result2[:300]}")
     
-    # 测试3: 禁用 gradient checkpointing 后再生成
-    print("\n--- 测试3: 禁用 gradient checkpointing 后再生成 ---")
+    # Test 3: Generate after disabling gradient checkpointing
+    print("\n--- Test 3: Generate after disabling gradient checkpointing ---")
     model.gradient_checkpointing_disable()
-    model.config.use_cache = True  # 手动恢复
+    model.config.use_cache = True  # manually restore
     print(f"model.config.use_cache after disable: {model.config.use_cache}")
     
     with torch.no_grad():
         outputs3 = model.generate(**inputs, max_new_tokens=50, do_sample=True, temperature=0.7)
     result3 = processor.batch_decode(outputs3, skip_special_tokens=True)[0]
-    print(f"结果: {result3[:300]}")
+    print(f"Result: {result3[:300]}")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--mode", choices=["single", "zero3", "gc"], default="single",
-                       help="测试模式: single=单卡, zero3=DeepSpeed Zero3, gc=gradient checkpointing")
+                       help="Test mode: single=single GPU, zero3=DeepSpeed Zero3, gc=gradient checkpointing")
     args = parser.parse_args()
     
     if args.mode == "single":

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-指令遵循能力测试脚本
-对同一个视频使用不同的prompt，测试模型是否真的遵循指令
+Instruction following capability test script
+Test whether the model truly follows instructions by using different prompts on the same video
 """
 
 import os
@@ -14,42 +14,42 @@ import re
 from pathlib import Path
 from datetime import datetime
 
-# 添加src路径到Python路径
+# Add src path to Python path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src" / "src"))
 
 from transformers import AutoProcessor, Qwen2_5OmniThinkerForConditionalGeneration
 from qwen_omni_utils import process_mm_info
 
-# 设置随机种子
+# Set random seed
 random.seed(42)
 torch.manual_seed(42)
 
 
-# ==================== 测试用的不同指令（3种代表性测试）====================
+# ==================== Different test instructions (3 representative tests) ====================
 TEST_PROMPTS = {
     "count_3_points": {
-        "name": "指定数量：3个要点",
+        "name": "Specified count: 3 key points",
         "instruction": "Please summarize this video in exactly 3 key points.",
-        "expected": "应该输出3个要点"
+        "expected": "Should output 3 key points"
     },
     
     "focus_people": {
-        "name": "指定关注点：人物",
+        "name": "Specified focus: people",
         "instruction": "Describe the people in this video, focusing on their actions, expressions, and interactions.",
-        "expected": "应该详细描述人物"
+        "expected": "Should describe people in detail"
     },
     
     "one_sentence": {
-        "name": "指定长度：一句话",
+        "name": "Specified length: one sentence",
         "instruction": "Describe this video in one single sentence.",
-        "expected": "应该只有一句话"
+        "expected": "Should be only one sentence"
     },
 }
 
 
 def load_dataset(yaml_path):
-    """加载训练数据集"""
-    print(f"📂 加载数据集: {yaml_path}")
+    """Load training dataset"""
+    print(f"Loading dataset: {yaml_path}")
     
     with open(yaml_path, 'r') as f:
         yaml_data = yaml.safe_load(f)
@@ -61,28 +61,28 @@ def load_dataset(yaml_path):
         json_path = dataset_config.get('json_path')
         data_root = dataset_config.get('data_root')
         
-        print(f"  ├─ 加载: {json_path}")
+        print(f"  Loading: {json_path}")
         
         with open(json_path, 'r') as f:
             data = json.load(f)
         
-        # 添加data_root路径
+        # Prepend data_root path
         if data_root:
             for sample in data:
                 if 'path' in sample:
                     sample['path'] = os.path.join(data_root, sample['path'])
         
         all_samples.extend(data)
-        print(f"  └─ 加载了 {len(data)} 个样本")
+        print(f"  Loaded {len(data)} samples")
     
-    print(f"\n✅ 总共加载 {len(all_samples)} 个样本\n")
+    print(f"\nTotal loaded: {len(all_samples)} samples\n")
     return all_samples
 
 
 def create_messages_with_custom_prompt(sample, custom_instruction, system_prompt):
-    """创建自定义指令的对话消息"""
+    """Create conversation messages with custom instruction"""
     
-    # 构造messages
+    # Construct messages
     messages = [
         {
             "role": "system",
@@ -114,7 +114,7 @@ def create_messages_with_custom_prompt(sample, custom_instruction, system_prompt
 
 
 def extract_tags(text):
-    """提取<context>, <think>, <answer>标签内容"""
+    """Extract <context>, <think>, <answer> tag contents"""
     context_match = re.search(r'<context>(.*?)</context>', text, re.DOTALL)
     think_match = re.search(r'<think>(.*?)</think>', text, re.DOTALL)
     answer_match = re.search(r'<answer>(.*?)</answer>', text, re.DOTALL)
@@ -127,7 +127,7 @@ def extract_tags(text):
 
 
 def count_sentences(text):
-    """统计句子数量"""
+    """Count number of sentences"""
     if not text:
         return 0
     sentences = re.split(r'[.!?]+', text)
@@ -135,10 +135,10 @@ def count_sentences(text):
 
 
 def count_list_items(text):
-    """统计列表项数量"""
+    """Count number of list items"""
     if not text:
         return 0
-    # 匹配编号列表 (1. 2. 3.) 或 项目符号 (- * •)
+    # Match numbered lists (1. 2. 3.) or bullet points (- * •)
     patterns = [
         r'^\d+\.',  # 1. 2. 3.
         r'^[-*•]',  # - * •
@@ -156,7 +156,7 @@ def count_list_items(text):
 
 
 def analyze_output(generated_text, prompt_config):
-    """分析输出是否符合指令"""
+    """Analyze whether output follows the instruction"""
     extracted = extract_tags(generated_text)
     analysis = {
         "has_context": extracted['context'] is not None,
@@ -166,33 +166,33 @@ def analyze_output(generated_text, prompt_config):
     
     answer_text = extracted.get('answer', '')
     
-    # 根据不同的prompt类型进行分析
+    # Analyze based on different prompt types
     prompt_key = prompt_config.get('key', '')
     
     if 'count_3' in prompt_key:
         list_count = count_list_items(answer_text)
         analysis['list_items'] = list_count
         analysis['follows_instruction'] = (list_count == 3)
-        analysis['note'] = f"要求3个要点，实际{list_count}个"
+        analysis['note'] = f"Required 3 key points, got {list_count}"
     
     elif 'count_5' in prompt_key:
         list_count = count_list_items(answer_text)
         analysis['list_items'] = list_count
         analysis['follows_instruction'] = (list_count == 5)
-        analysis['note'] = f"要求5个观察点，实际{list_count}个"
+        analysis['note'] = f"Required 5 observations, got {list_count}"
     
     elif 'one_sentence' in prompt_key:
         sent_count = count_sentences(answer_text)
         analysis['sentence_count'] = sent_count
         analysis['follows_instruction'] = (sent_count == 1)
-        analysis['note'] = f"要求1句话，实际{sent_count}句"
+        analysis['note'] = f"Required 1 sentence, got {sent_count}"
     
     elif 'focus_people' in prompt_key:
         people_keywords = ['person', 'people', 'man', 'woman', 'he', 'she', 'they', 'facial', 'expression', 'gesture', 'interaction']
         keyword_count = sum(1 for kw in people_keywords if kw in answer_text.lower())
         analysis['people_keyword_count'] = keyword_count
         analysis['follows_instruction'] = (keyword_count >= 5)
-        analysis['note'] = f"人物相关关键词出现{keyword_count}次"
+        analysis['note'] = f"People-related keywords appeared {keyword_count} times"
     
     elif 'focus_environment' in prompt_key:
         env_keywords = ['background', 'setting', 'location', 'environment', 'room', 'outdoor', 'indoor', 'place']
@@ -202,33 +202,33 @@ def analyze_output(generated_text, prompt_config):
         analysis['environment_keyword_count'] = env_count
         analysis['people_keyword_count'] = people_count
         analysis['follows_instruction'] = (env_count > people_count)
-        analysis['note'] = f"环境词{env_count}次 vs 人物词{people_count}次"
+        analysis['note'] = f"Environment words {env_count} vs people words {people_count}"
     
     elif 'timeline' in prompt_key:
         timeline_keywords = ['first', 'then', 'next', 'after', 'finally', 'initially', 'subsequently']
         keyword_count = sum(1 for kw in timeline_keywords if kw in answer_text.lower())
         analysis['timeline_keyword_count'] = keyword_count
         analysis['follows_instruction'] = (keyword_count >= 3)
-        analysis['note'] = f"时间顺序词出现{keyword_count}次"
+        analysis['note'] = f"Temporal order words appeared {keyword_count} times"
     
     else:
         analysis['follows_instruction'] = None
-        analysis['note'] = "通用回答，无特定要求"
+        analysis['note'] = "General response, no specific requirement"
     
     return analysis, extracted
 
 
 def generate_with_prompt(model, processor, sample, prompt_config, system_prompt):
-    """使用特定prompt生成输出（与test_base_model.py保持一致的处理流程）"""
+    """Generate output with a specific prompt (processing flow consistent with test_base_model.py)"""
     
-    # 创建消息
+    # Create messages
     messages = create_messages_with_custom_prompt(
         sample, 
         prompt_config['instruction'],
         system_prompt
     )
     
-    # 应用chat template
+    # Apply chat template
     texts = processor.apply_chat_template(
         [messages],
         tokenize=False,
@@ -236,7 +236,7 @@ def generate_with_prompt(model, processor, sample, prompt_config, system_prompt)
     )
     text = texts[0]
     
-    # 处理多模态输入（与test_base_model保持一致：use_audio_in_video=False）
+    # Process multimodal inputs (consistent with test_base_model: use_audio_in_video=False)
     audios, images, videos = process_mm_info(messages, use_audio_in_video=False)
     
     inputs = processor(
@@ -246,28 +246,28 @@ def generate_with_prompt(model, processor, sample, prompt_config, system_prompt)
         audio=audios,
         return_tensors="pt",
         padding=True,
-        truncation=True,  # 与test_base_model保持一致
+        truncation=True,  # consistent with test_base_model
         max_length=32768
     )
     
     inputs = inputs.to(model.device)
     
-    # 检查序列长度（防御措施）
+    # Check sequence length (safety measure)
     seq_len = inputs['input_ids'].shape[1]
     if seq_len > 32768:
-        raise AssertionError(f"序列太长: {seq_len} > 32768")
+        raise AssertionError(f"Sequence too long: {seq_len} > 32768")
     
-    # 生成
+    # Generate
     with torch.no_grad():
         generated_ids = model.generate(
             **inputs,
             max_new_tokens=1024,
-            do_sample=False,  # 贪婪解码，确保结果稳定
+            do_sample=False,  # greedy decoding for stable results
             temperature=1.0,
             top_p=0.9
         )
     
-    # 只取生成的部分
+    # Only take generated part
     generated_ids = [
         output_ids[len(input_ids):] 
         for input_ids, output_ids in zip(inputs.input_ids, generated_ids)
@@ -284,16 +284,16 @@ def generate_with_prompt(model, processor, sample, prompt_config, system_prompt)
 
 def main():
     print("=" * 80)
-    print("🧪 HumanOmniV2 指令遵循能力测试")
+    print("Instruction Following Capability Test")
     print("=" * 80)
     print()
     
-    # ==================== 配置 ====================
+    # ==================== Configuration ====================
     MODEL_PATH = "${PROJECT_ROOT}/models/HumanOmniV2"
     BASE_MODEL_PATH = "${PROJECT_ROOT}/Qwen2.5-Omni-7B-Thinker"
     DATASET_PATH = "../configs/test_samples.yaml"
     
-    # 使用与test_base_model相同的system prompt
+    # Use the same system prompt as test_base_model
     SYSTEM_PROMPT = """You are a helpful assistant. Your primary goal is to deeply analyze and interpret information from available various modalities (image, video, audio, text context) to answer questions with human-like depth and a clear, traceable thought process.
 
 Begin by thoroughly understanding the image, video, audio or other available context information, and then proceed with an in-depth analysis related to the question. 
@@ -313,9 +313,9 @@ In reasoning, It is encouraged to incorporate self-reflection and verification i
 Provide your understanding of the image, video, and audio between the <context> </context> tags, detail the reasoning between the <think> </think> tags, and then give your final answer between the <answer> </answer> tags.
 """
     
-    # ==================== 加载模型 ====================
-    print("🔧 加载模型...")
-    print(f"  模型权重路径: {MODEL_PATH}")
+    # ==================== Load Model ====================
+    print("Loading model...")
+    print(f"  Model weights path: {MODEL_PATH}")
     
     processor = AutoProcessor.from_pretrained(BASE_MODEL_PATH, trust_remote_code=True)
     
@@ -331,23 +331,23 @@ Provide your understanding of the image, video, and audio between the <context> 
     )
     model.eval()
     
-    print("✅ 模型加载成功！")
+    print("Model loaded successfully!")
     print()
     
-    # ==================== 加载数据 ====================
+    # ==================== Load Data ====================
     all_samples = load_dataset(DATASET_PATH)
     
-    # 随机选择一个视频样本
+    # Randomly select a video sample
     sample = random.choice(all_samples)
     
-    print("🎲 测试样本:")
-    print(f"  视频路径: {sample.get('path', 'unknown')}")
-    print(f"  数据类型: {sample.get('data_type', 'unknown')}")
+    print("Test sample:")
+    print(f"  Video path: {sample.get('path', 'unknown')}")
+    print(f"  Data type: {sample.get('data_type', 'unknown')}")
     print()
     
-    # ==================== 测试不同的指令 ====================
+    # ==================== Test Different Instructions ====================
     print("=" * 80)
-    print("开始测试不同指令...")
+    print("Testing different instructions...")
     print("=" * 80)
     print()
     
@@ -355,38 +355,38 @@ Provide your understanding of the image, video, and audio between the <context> 
     
     for prompt_key, prompt_config in TEST_PROMPTS.items():
         print(f"\n{'='*80}")
-        print(f"🔹 测试 {prompt_config['name']}")
+        print(f"Testing: {prompt_config['name']}")
         print(f"{'='*80}")
-        print(f"指令: {prompt_config['instruction']}")
-        print(f"预期: {prompt_config['expected']}")
+        print(f"Instruction: {prompt_config['instruction']}")
+        print(f"Expected: {prompt_config['expected']}")
         print()
         
-        # 生成输出
-        print("⏳ 生成中...")
+        # Generate output
+        print("Generating...")
         generated_text = generate_with_prompt(
             model, processor, sample, prompt_config, SYSTEM_PROMPT
         )
         
-        # 分析输出
+        # Analyze output
         prompt_config['key'] = prompt_key
         analysis, extracted = analyze_output(generated_text, prompt_config)
         
-        # 显示结果
-        print("✅ 生成完成")
+        # Display results
+        print("Generation complete")
         print()
-        print("【分析结果】")
+        print("[Analysis Results]")
         if analysis.get('follows_instruction') is not None:
-            status = "✅ 遵循" if analysis['follows_instruction'] else "❌ 未遵循"
-            print(f"  指令遵循: {status}")
-        print(f"  说明: {analysis['note']}")
+            status = "FOLLOWED" if analysis['follows_instruction'] else "NOT FOLLOWED"
+            print(f"  Instruction following: {status}")
+        print(f"  Note: {analysis['note']}")
         
         print()
-        print("【生成的答案】")
-        answer = extracted.get('answer', '无')
+        print("[Generated Answer]")
+        answer = extracted.get('answer', 'None')
         print(f"{answer[:500]}{'...' if len(answer) > 500 else ''}")
         print()
         
-        # 保存结果
+        # Save results
         results[prompt_key] = {
             "prompt": prompt_config,
             "generated_text": generated_text,
@@ -394,16 +394,16 @@ Provide your understanding of the image, video, and audio between the <context> 
             "analysis": analysis
         }
     
-    # ==================== 总结对比 ====================
+    # ==================== Summary Comparison ====================
     print("\n" + "=" * 80)
-    print("📊 指令遵循能力总结")
+    print("Instruction Following Summary")
     print("=" * 80)
     print()
     
     follow_count = 0
     total_testable = 0
     
-    print(f"{'指令类型':<25} {'遵循状态':<15} {'详细说明'}")
+    print(f"{'Instruction Type':<25} {'Status':<15} {'Details'}")
     print("-" * 80)
     
     for prompt_key, result in results.items():
@@ -415,20 +415,20 @@ Provide your understanding of the image, video, and audio between the <context> 
             total_testable += 1
             if follows:
                 follow_count += 1
-                status = "✅ 遵循"
+                status = "FOLLOWED"
             else:
-                status = "❌ 未遵循"
+                status = "NOT FOLLOWED"
         else:
-            status = "➖ 无法判断"
+            status = "N/A"
         
         print(f"{name:<25} {status:<15} {note}")
     
     print("-" * 80)
     if total_testable > 0:
         follow_rate = (follow_count / total_testable) * 100
-        print(f"\n📈 指令遵循率: {follow_count}/{total_testable} ({follow_rate:.1f}%)")
+        print(f"\nInstruction following rate: {follow_count}/{total_testable} ({follow_rate:.1f}%)")
     
-    # ==================== 保存结果 ====================
+    # ==================== Save Results ====================
     log_dir = Path("../logs")
     log_dir.mkdir(exist_ok=True)
     
@@ -451,26 +451,26 @@ Provide your understanding of the image, video, and audio between the <context> 
     with open(output_file, 'w', encoding='utf-8') as f:
         json.dump(test_result, f, ensure_ascii=False, indent=2)
     
-    print(f"\n💾 测试结果已保存到: {output_file}")
+    print(f"\nTest results saved to: {output_file}")
     
-    # ==================== 结论 ====================
+    # ==================== Conclusion ====================
     print("\n" + "=" * 80)
-    print("🎯 测试结论")
+    print("Test Conclusion")
     print("=" * 80)
     print()
     
     if total_testable == 0:
-        print("⚠️  无法评估指令遵循能力（所有测试都无法判断）")
+        print("Cannot evaluate instruction following (all tests indeterminate)")
     elif follow_rate >= 80:
-        print("✅ 指令遵循能力 **强**")
-        print("   模型能够很好地理解和执行不同类型的指令")
+        print("Instruction following capability: **Strong**")
+        print("   The model can understand and execute different types of instructions well")
     elif follow_rate >= 50:
-        print("⚠️  指令遵循能力 **中等**")
-        print("   模型能理解部分指令，但执行不够精确")
+        print("Instruction following capability: **Moderate**")
+        print("   The model understands some instructions but execution is not precise enough")
     else:
-        print("❌ 指令遵循能力 **弱**")
-        print("   模型难以遵循具体的指令要求")
-        print("   可能过拟合到特定的问答格式")
+        print("Instruction following capability: **Weak**")
+        print("   The model struggles to follow specific instruction requirements")
+        print("   May be overfitting to a specific Q&A format")
     
     print()
 
